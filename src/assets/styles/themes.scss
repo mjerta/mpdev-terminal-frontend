@@ -8,27 +8,102 @@
   --color-text-muted: var(--text-muted);
 }
 
-:root,
-[data-theme='light'] {
-  --surface: #ffffff;
-  --primary: #2563eb;
-  --accent: #1d4ed8;
-  --text-main: #1f2937;
-  --text-muted: #4b5563;
+:root {
+  --surface: #1e1e2e;
+  --primary: #89b4fa;
+  --accent: #f38ba8;
+  --text-main: #cdd6f4;
+  --text-muted: #a6adc8;
 }
 
-[data-theme='dark'] {
-  --surface: #111827;
-  --primary: #3b82f6;
-  --accent: #ef4444;
-  --text-main: #f9fafb;
-  --text-muted: #9ca3af;
+/* --- TOP 10 TERMINALCOLOR.COM THEMES --- */
+
+/* 1. Catppuccin Mocha */
+[data-theme='catppuccin'] {
+  --surface: #1e1e2e;
+  --primary: #89b4fa; /* Blue */
+  --accent: #f38ba8; /* Red/Pink */
+  --text-main: #cdd6f4;
+  --text-muted: #a6adc8;
 }
 
-[data-theme='cyberpunk'] {
-  --surface: #0a0612;
-  --primary: #ff0055;
-  --accent: #00f0ff;
-  --text-main: #f3f0ff;
-  --text-muted: #a78bfa;
+/* 2. Tokyo Night */
+[data-theme='tokyo-night'] {
+  --surface: #1a1b26;
+  --primary: #7aa2f7; /* Blue */
+  --accent: #f7768e; /* Red */
+  --text-main: #c0caf5;
+  --text-muted: #565f89;
+}
+
+/* 3. Dracula */
+[data-theme='dracula'] {
+  --surface: #282a36;
+  --primary: #bd93f9; /* Purple */
+  --accent: #ff79c6; /* Pink */
+  --text-main: #f8f8f2;
+  --text-muted: #6272a4;
+}
+
+/* 4. One Dark */
+[data-theme='one-dark'] {
+  --surface: #1e222a;
+  --primary: #61afef; /* Blue */
+  --accent: #e06c75; /* Red */
+  --text-main: #abb2bf;
+  --text-muted: #5c6370;
+}
+
+/* 5. Nord */
+[data-theme='nord'] {
+  --surface: #2e3440;
+  --primary: #88c0d0; /* Frost Cyan/Blue */
+  --accent: #bf616a; /* Aurora Red */
+  --text-main: #eceff4;
+  --text-muted: #4c566a;
+}
+
+/* 6. Kanagawa Wave */
+[data-theme='kanagawa'] {
+  --surface: #1f1f28;
+  --primary: #7e9cd8; /* Blue */
+  --accent: #e82424; /* Samurai Red */
+  --text-main: #dcd7ba;
+  --text-muted: #727169;
+}
+
+/* 7. Gruvbox Dark */
+[data-theme='gruvbox'] {
+  --surface: #282828;
+  --primary: #b8bb26; /* Green */
+  --accent: #fb4934; /* Bright Red */
+  --text-main: #ebdbb2;
+  --text-muted: #928374;
+}
+
+/* 8. Ayu Dark */
+[data-theme='ayu'] {
+  --surface: #0f1419;
+  --primary: #33ccff; /* Bright Cyan */
+  --accent: #ff8f40; /* Orange */
+  --text-main: #bfccc6;
+  --text-muted: #5c6773;
+}
+
+/* 9. Rose Pine */
+[data-theme='rose-pine'] {
+  --surface: #191724;
+  --primary: #ebbcba; /* Gold/Rose */
+  --accent: #eb6f92; /* Love Pink */
+  --text-main: #e0def4;
+  --text-muted: #6e6a86;
+}
+
+/* 10. Solarized Dark */
+[data-theme='solarized'] {
+  --surface: #002b36;
+  --primary: #2aa198; /* Cyan */
+  --accent: #cb4b16; /* Orange */
+  --text-main: #eee8d5;
+  --text-muted: #657b83;
 }
