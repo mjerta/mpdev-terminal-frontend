@@ -1,11 +1,15 @@
 import { Component } from '@angular/core';
-
+import { FontAwesomeModule } from '@fortawesome/angular-fontawesome';
+import { faPalette } from '@fortawesome/free-solid-svg-icons';
 @Component({
   selector: 'app-main-container',
-  imports: [],
+  standalone: true,
+  imports: [FontAwesomeModule],
   templateUrl: './main-container.html',
   styleUrl: './main-container.scss',
 })
 export class MainContainer {
-  currentTheme = 'gruvbox';
+  isOpen: boolean = false;
+  currentTheme: string = 'tokyo-night';
+  faPalette = faPalette;
 }
