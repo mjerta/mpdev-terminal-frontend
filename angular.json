@@ -28,7 +28,7 @@
                 "input": "public"
               }
             ],
-            "styles": ["src/styles.scss"]
+            "styles": ["src/assets/styles/styles.scss"]
           },
           "configurations": {
             "production": {

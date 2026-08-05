@@ -1,0 +1,34 @@
+@import 'tailwindcss';
+
+@theme inline {
+  --color-surface: var(--surface);
+  --color-primary: var(--primary);
+  --color-accent: var(--accent);
+  --color-text-main: var(--text-main);
+  --color-text-muted: var(--text-muted);
+}
+
+:root,
+[data-theme='light'] {
+  --surface: #ffffff;
+  --primary: #2563eb;
+  --accent: #1d4ed8;
+  --text-main: #1f2937;
+  --text-muted: #4b5563;
+}
+
+[data-theme='dark'] {
+  --surface: #111827;
+  --primary: #3b82f6;
+  --accent: #ef4444;
+  --text-main: #f9fafb;
+  --text-muted: #9ca3af;
+}
+
+[data-theme='cyberpunk'] {
+  --surface: #0a0612;
+  --primary: #ff0055;
+  --accent: #00f0ff;
+  --text-main: #f3f0ff;
+  --text-muted: #a78bfa;
+}
