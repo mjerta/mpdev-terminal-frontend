@@ -6,4 +6,6 @@ import { Component } from '@angular/core';
   templateUrl: './main-container.html',
   styleUrl: './main-container.scss',
 })
-export class MainContainer {}
+export class MainContainer {
+  currentTheme = 'gruvbox';
+}
