@@ -6,25 +6,27 @@
     <app-theme-dropdown [(selectedId)]="currentTheme" />
   </header>
 
-  <section class="grow p-4 sm:p-6">
-    <app-card-grid>
-      @for (theme of themes; track theme.id) {
-        <app-card [theme]="theme.id" [title]="theme.name" [subtitle]="theme.id">
-          <!-- Palette preview: each swatch resolves against this card's own theme -->
-          <div class="flex gap-2">
-            <span class="h-5 w-5 rounded-full border border-border bg-surface"></span>
-            <span class="h-5 w-5 rounded-full border border-border bg-primary"></span>
-            <span class="h-5 w-5 rounded-full border border-border bg-accent"></span>
-          </div>
+  @if (showGallery()) {
+    <section class="grow p-4 sm:p-6">
+      <app-card-grid>
+        @for (theme of themes; track theme.id) {
+          <app-card [theme]="theme.id" [title]="theme.name" [subtitle]="theme.id">
+            <!-- Palette preview: each swatch resolves against this card's own theme -->
+            <div class="flex gap-2">
+              <span class="h-5 w-5 rounded-full border border-border bg-surface"></span>
+              <span class="h-5 w-5 rounded-full border border-border bg-primary"></span>
+              <span class="h-5 w-5 rounded-full border border-border bg-accent"></span>
+            </div>
 
-          <button
-            card-action
-            class="rounded bg-primary px-4 py-2 font-medium text-surface transition-opacity hover:opacity-90"
-          >
-            Click Me
-          </button>
-        </app-card>
-      }
-    </app-card-grid>
-  </section>
+            <button
+              card-action
+              class="rounded bg-primary px-4 py-2 font-medium text-surface transition-opacity hover:opacity-90"
+            >
+              Click Me
+            </button>
+          </app-card>
+        }
+      </app-card-grid>
+    </section>
+  }
 </main>

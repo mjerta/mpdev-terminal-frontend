@@ -16,4 +16,7 @@ export class MainContainer {
 
   /** Single source of truth for the active theme, shared with the dropdown. */
   protected readonly currentTheme = signal('tokyo-night');
+
+  /** Flip to true to bring the theme preview wall back. */
+  protected readonly showGallery = signal(false);
 }
