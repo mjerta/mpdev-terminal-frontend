@@ -1,0 +1,22 @@
+:host {
+  /* The projected cards are direct children of this element, so it is the grid. */
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  max-width: 64rem;
+  margin-inline: auto;
+
+  /*
+    auto-fit + minmax() reflows on its own: one column on a phone, more as width
+    allows, and never a horizontal scrollbar. min(16rem, 100%) keeps a single
+    track from overflowing a viewport narrower than the minimum card width.
+  */
+  grid-template-columns: repeat(auto-fit, minmax(min(16rem, 100%), 1fr));
+  gap: 1rem;
+}
+
+@media (min-width: 640px) {
+  :host {
+    gap: 1.5rem;
+  }
+}

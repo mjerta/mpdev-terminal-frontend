@@ -1,0 +1,22 @@
+<div
+  [attr.data-theme]="theme()"
+  class="flex min-w-0 flex-col rounded-xl border border-border bg-card p-6 text-foreground"
+>
+  @if (title()) {
+    <h2 class="mb-1 truncate text-lg font-bold">{{ title() }}</h2>
+  }
+
+  @if (subtitle()) {
+    <p class="mb-4 truncate text-sm text-muted-foreground">{{ subtitle() }}</p>
+  }
+
+  <!-- Body -->
+  <div class="min-w-0">
+    <ng-content />
+  </div>
+
+  <!-- Optional footer: collapses entirely when nothing is projected into it -->
+  <div class="mt-5 empty:hidden">
+    <ng-content select="[card-action]" />
+  </div>
+</div>
