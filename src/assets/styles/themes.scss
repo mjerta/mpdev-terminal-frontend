@@ -1,11 +1,24 @@
 @import 'tailwindcss';
 
 @theme inline {
+  /* Base terminal-palette tokens (declared per [data-theme] below) */
   --color-surface: var(--surface);
   --color-primary: var(--primary);
   --color-accent: var(--accent);
   --color-text-main: var(--text-main);
   --color-text-muted: var(--text-muted);
+
+  /*
+    Semantic aliases, derived from the base tokens so every theme works with no
+    per-theme additions. Because this block is `@theme inline`, the utilities
+    reference these var() calls directly instead of a resolved value, so they
+    follow whichever [data-theme] scope is nearest to the element.
+  */
+  --color-foreground: var(--text-main);
+  --color-muted-foreground: var(--text-muted);
+  --color-card: color-mix(in oklab, var(--surface) 88%, var(--text-main));
+  --color-muted: color-mix(in oklab, var(--surface) 78%, var(--text-main));
+  --color-border: color-mix(in oklab, var(--text-main) 20%, transparent);
 }
 
 :root {

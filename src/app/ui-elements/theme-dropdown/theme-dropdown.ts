@@ -1,4 +1,5 @@
-import { Component, output, signal } from '@angular/core';
+import { Component, computed, model, signal } from '@angular/core';
+import { THEMES, Theme } from '../../framework/themes';
 
 @Component({
   selector: 'app-theme-dropdown',
@@ -7,29 +8,18 @@ import { Component, output, signal } from '@angular/core';
   styleUrl: './theme-dropdown.scss',
 })
 export class ThemeDropdown {
-  isOpen = signal(false);
-  selectedId = 'gruvbox';
-  currentThemeName = signal('Gruvbox');
+  protected readonly isOpen = signal(false);
+  protected readonly themes = THEMES;
 
-  themeChange = output<string>();
+  /** Two-way bound by the host: [(selectedId)]="currentTheme" */
+  readonly selectedId = model<string>();
 
-  themes = [
-    { id: 'catppuccin', name: 'Catppuccin Mocha' },
-    { id: 'tokyo-night', name: 'Tokyo Night' },
-    { id: 'dracula', name: 'Dracula' },
-    { id: 'one-dark', name: 'One Dark' },
-    { id: 'nord', name: 'Nord' },
-    { id: 'kanagawa', name: 'Kanagawa' },
-    { id: 'gruvbox', name: 'Gruvbox' },
-    { id: 'ayu', name: 'Ayu Dark' },
-    { id: 'rose-pine', name: 'Rosé Pine' },
-    { id: 'solarized', name: 'Solarized Dark' },
-  ];
+  protected readonly currentThemeName = computed(
+    () => this.themes.find((theme) => theme.id === this.selectedId())?.name ?? 'Select a theme',
+  );
 
-  selectTheme(theme: { id: string; name: string }) {
-    this.selectedId = theme.id;
-    this.currentThemeName.set(theme.name);
-    this.themeChange.emit(theme.id);
+  protected selectTheme(theme: Theme): void {
+    this.selectedId.set(theme.id);
     this.isOpen.set(false);
   }
 }

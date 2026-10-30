@@ -1,39 +1,43 @@
 <main
-  [attr.data-theme]="currentTheme"
-  class="flex bg-surface grow gap-6 p-6 items-center justify-center min-h-[400px]"
+  [attr.data-theme]="currentTheme()"
+  class="flex grow flex-col overflow-x-hidden bg-surface text-foreground"
 >
-  <fa-icon
-    [icon]="faPalette"
-    class="absolute text-text-main top-2 right-2 cursor-pointer"
-  ></fa-icon>
-  <app-theme-dropdown></app-theme-dropdown>
-  <div
-    data-theme="tokyo-night"
-    class="w-80 p-8 bg-surface text-text-main rounded-xl border border-2 border-accent"
-  >
-    <h2 class="text-xl font-bold mb-4">Dark Container</h2>
-    <p class="text-text-main opacity-80 text-sm mb-6">
-      Standard slate-gray background with electric blue primary accent.
-    </p>
-    <button
-      class="bg-primary text-text-main hover:opacity-90 px-4 py-2 rounded font-medium transition-opacity"
-    >
-      Click Me
-    </button>
-  </div>
+  <header class="flex justify-end p-4 sm:p-6">
+    <app-theme-dropdown [(selectedId)]="currentTheme" />
+  </header>
 
-  <div
-    data-theme="gruvbox"
-    class="w-80 p-8 bg-surface text-text-main rounded-xl border border-2 border-accent"
-  >
-    <h2 class="text-xl font-bold mb-4">Dark Container</h2>
-    <p class="text-text-main opacity-80 text-sm mb-6">
-      Standard slate-gray background with electric blue primary accent.
-    </p>
-    <button
-      class="bg-primary text-text-main hover:opacity-90 px-4 py-2 rounded font-medium transition-opacity"
+  <section class="grow p-4 sm:p-6">
+    <!--
+      auto-fit + minmax() lets the gallery fill whatever width exists and wrap on
+      its own, so cards fit the screen without any explicit breakpoints.
+      min(16rem,100%) keeps the single track from overflowing a very narrow
+      viewport, and min-w-0 stops the grid being sized by its min-content width.
+    -->
+    <div
+      class="mx-auto grid w-full min-w-0 max-w-5xl grid-cols-[repeat(auto-fit,minmax(min(16rem,100%),1fr))] gap-4 sm:gap-6"
     >
-      Click Me
-    </button>
-  </div>
+      @for (theme of themes; track theme.id) {
+        <div
+          [attr.data-theme]="theme.id"
+          class="min-w-0 rounded-xl border border-border bg-card p-6 text-foreground"
+        >
+          <h2 class="mb-1 truncate text-lg font-bold">{{ theme.name }}</h2>
+          <p class="mb-4 truncate text-sm text-muted-foreground">{{ theme.id }}</p>
+
+          <!-- Palette preview: each swatch resolves against this card's own theme -->
+          <div class="mb-5 flex gap-2">
+            <span class="h-5 w-5 rounded-full border border-border bg-surface"></span>
+            <span class="h-5 w-5 rounded-full border border-border bg-primary"></span>
+            <span class="h-5 w-5 rounded-full border border-border bg-accent"></span>
+          </div>
+
+          <button
+            class="rounded bg-primary px-4 py-2 font-medium text-surface transition-opacity hover:opacity-90"
+          >
+            Click Me
+          </button>
+        </div>
+      }
+    </div>
+  </section>
 </main>
