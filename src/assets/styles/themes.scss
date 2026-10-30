@@ -21,6 +21,41 @@
   --color-border: color-mix(in oklab, var(--text-main) 20%, transparent);
 }
 
+/*
+  One viewport tall, full stop. 100vh is the *large* viewport on phones: it is
+  measured as if the browser toolbar were hidden, so the shell ends up taller
+  than the screen and the page scrolls to reveal the excess. 100dvh tracks the
+  area that is actually visible. The 100vh line above stays as the fallback for
+  browsers without dynamic viewport units.
+
+  An explicit height (not min-height) keeps the size definite all the way down
+  the flex chain, which is what lets content fill the remaining space without
+  ever growing the document.
+*/
+html {
+  height: 100vh;
+  height: 100dvh;
+}
+
+/*
+  Insets for the notch, the iOS home indicator and Android's gesture /
+  3-button bar. These are 0 unless index.html sets viewport-fit=cover. Applied
+  to <main>, which owns bg-surface, so the inset band is painted in the live
+  theme colour instead of showing up as a dead border.
+*/
+@utility pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+@utility pr-safe {
+  padding-right: env(safe-area-inset-right, 0px);
+}
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+@utility pl-safe {
+  padding-left: env(safe-area-inset-left, 0px);
+}
+
 :root {
   --surface: #1e1e2e;
   --primary: #89b4fa;

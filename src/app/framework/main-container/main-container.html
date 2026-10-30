@@ -1,13 +1,13 @@
 <main
   [attr.data-theme]="currentTheme()"
-  class="flex grow flex-col overflow-x-hidden bg-surface text-foreground"
+  class="flex min-h-0 grow flex-col overflow-x-hidden bg-surface pt-safe pr-safe pb-safe pl-safe text-foreground"
 >
   <header class="flex justify-end p-4 sm:p-6">
     <app-theme-dropdown [(selectedId)]="currentTheme" />
   </header>
 
   @if (showGallery()) {
-    <section class="grow p-4 sm:p-6">
+    <section class="min-h-0 grow p-4 sm:p-6">
       <app-card-grid>
         @for (theme of themes; track theme.id) {
           <app-card [theme]="theme.id" [title]="theme.name" [subtitle]="theme.id">
