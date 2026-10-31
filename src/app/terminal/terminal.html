@@ -28,6 +28,10 @@
           <span [class]="seg.classes">{{ seg.text }}</span>
         }
         <span>{{ line }}</span>
+        @if ($last && bootHint()) {
+          <!-- Muted and classed, so it can never be read as typed input. -->
+          <span class="text-muted-foreground">{{ bootHint() }}</span>
+        }
         @if ($last) {
           <span class="caret" [class.caret--steady]="typing()"></span>
         }

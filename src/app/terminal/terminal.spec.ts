@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 
 import { Terminal } from './terminal';
+import { TerminalBoot } from './boot';
 
 describe('Terminal', () => {
   let component: Terminal;
@@ -186,6 +187,50 @@ describe('Terminal', () => {
       expect(listed).toContain('help');
       expect(listed).toContain('nope');
       expect(listed).toContain('clear');
+    });
+  });
+
+  describe('boot', () => {
+    const identityVisible = (): boolean =>
+      (fixture.nativeElement as HTMLElement).textContent?.includes('@mpdev') ?? false;
+    const bootText = (): string => (fixture.nativeElement as HTMLElement).textContent ?? '';
+
+    /** Sources this component can settle on its own; `theme` belongs to MainContainer. */
+    const settleTerminalSources = (): void => {
+      const boot = TestBed.inject(TerminalBoot);
+      boot.mark('identity');
+      boot.mark('history');
+      boot.mark('theme');
+      fixture.detectChanges();
+    };
+
+    it('withholds the placeholder identity rather than showing a guess', () => {
+      // Nothing has been restored yet in this fixture, so the confident-looking
+      // `guest@mpdev` must not be on screen.
+      expect(identityVisible()).toBe(false);
+
+      settleTerminalSources();
+      expect(identityVisible()).toBe(true);
+    });
+
+    it('stays quiet on a fast boot rather than flashing a loader', () => {
+      settleTerminalSources();
+      expect(bootText()).not.toContain('booting');
+    });
+
+    it('shows real progress while storage is genuinely slow', async () => {
+      // `theme` is never marked in a Terminal-only fixture, so this stands in for
+      // a visit where a source is still outstanding past the grace period.
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      fixture.detectChanges();
+      expect(bootText()).toMatch(/booting \d+% [█░]+/);
+    });
+
+    it('lets typed input take over from the hint', async () => {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      type('ls');
+      expect(bootText()).not.toContain('booting');
+      expect(committedPrompts().length).toBeGreaterThanOrEqual(0);
     });
   });
 });

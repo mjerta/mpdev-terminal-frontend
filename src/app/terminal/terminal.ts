@@ -10,6 +10,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { CommandStore } from './command.store';
+import { TerminalBoot } from './boot';
 import {
   commandNotFound,
   EXIT_NOT_FOUND,
@@ -69,6 +70,7 @@ export class Terminal implements TerminalCommandContext {
   private readonly scroller = viewChild<ElementRef<HTMLElement>>('scroller');
   private readonly capture = viewChild<ElementRef<HTMLInputElement>>('capture');
   private readonly settings = inject(SettingsStore);
+  private readonly boot = inject(TerminalBoot);
 
   /** Read only for its `height` signal, which the scroll pin depends on. */
   private readonly viewport = inject(VisibleViewport);
@@ -118,7 +120,13 @@ export class Terminal implements TerminalCommandContext {
       cwd: this.config.cwd,
       symbol: this.config.promptSymbol,
       errorSymbol: this.config.errorSymbol,
-      showIdentity: this.config.showUserHost,
+      /*
+        Withheld until boot finishes. The placeholder name would otherwise read as
+        a settled answer: `guest@mpdev` is indistinguishable from a real guest
+        that happens to be called "guest", so showing it for a frame is worse than
+        showing nothing and letting the true identity arrive.
+      */
+      showIdentity: this.config.showUserHost && this.boot.ready(),
     };
     return {
       ok: buildPrompt({ ...shared, failed: false }),
@@ -164,6 +172,16 @@ export class Terminal implements TerminalCommandContext {
 
   /** Always at least one entry, so the caret has a line to sit on. */
   protected readonly logicalLines = computed(() => this.input().split('\n'));
+
+  /**
+   * What to show in place of typed text while stored state is still arriving.
+   *
+   * Empty once anything has been typed, so a slow boot can never overwrite or sit
+   * under what the visitor is actually entering.
+   */
+  protected readonly bootHint = computed(() =>
+    this.input() === '' && this.boot.showLoader() ? this.boot.hint() : '',
+  );
 
   constructor(
     private readonly host: ElementRef<HTMLElement>,
@@ -213,8 +231,16 @@ export class Terminal implements TerminalCommandContext {
     destroyRef.onDestroy(() => {
       alive = false;
     });
-    if (!this.config.user) {
+    if (this.config.user) {
+      // Nothing to look up, but the source still counts as settled.
+      this.boot.mark('identity');
+    } else {
       void this.settings.guestName().then((name) => {
+        /*
+          Marked unconditionally: this is app-level readiness, not view state, so a
+          view torn down mid-read must not leave the loader waiting forever.
+        */
+        this.boot.mark('identity');
         if (alive) this.guest.set(name);
       });
     }
@@ -231,6 +257,12 @@ export class Terminal implements TerminalCommandContext {
    */
   private async restore(): Promise<void> {
     const stored = await this.store.load();
+    /*
+      Marked before the early return: boot has to complete whether or not there
+      was anything to restore, otherwise an empty history would leave the loader
+      hanging on a source that is never going to answer.
+    */
+    this.boot.mark('history');
     if (stored.length === 0) return;
     this.commands.update((current) => [...stored.map((command) => command.text), ...current]);
   }

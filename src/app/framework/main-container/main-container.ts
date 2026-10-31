@@ -3,6 +3,7 @@ import { ThemeDropdown } from '../../ui-elements/theme-dropdown/theme-dropdown';
 import { Card } from '../../ui-elements/card/card';
 import { CardGrid } from '../../ui-elements/card-grid/card-grid';
 import { SettingsStore } from '../../terminal/settings.store';
+import { TerminalBoot } from '../../terminal/boot';
 import { Terminal } from '../../terminal/terminal';
 import { THEMES } from '../themes';
 
@@ -29,12 +30,19 @@ export class MainContainer {
   protected readonly showGallery = signal(false);
 
   private readonly settings = inject(SettingsStore);
+  private readonly boot = inject(TerminalBoot);
 
   /** Set as soon as the user picks, so a slow load cannot overwrite their choice. */
   private userChose = false;
 
   constructor() {
     void this.settings.load<string>(SettingsStore.THEME).then((saved) => {
+      /*
+        Marked ahead of the early returns below. This source has answered as soon
+        as the read resolves, whatever it decided to do with the value, so the
+        loader must not keep waiting on a path that will never set anything.
+      */
+      this.boot.mark('theme');
       if (this.userChose) return;
       // Ignore anything that is not a theme we still have, so a removed id from
       // an older visit cannot leave the app unstyled.
