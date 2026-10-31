@@ -1,6 +1,7 @@
 import { Component, DestroyRef, ElementRef, afterRenderEffect, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { CommandStore } from './command.store';
 import { findCommand, TerminalCommandContext } from './commands';
+import { SettingsStore } from './settings.store';
 import { LineKind, RenderLine, spliceBlock, trailingBackslashes } from './line';
 import { FICTIONAL_TERMINAL, TerminalConfig } from './terminal.config';
 
@@ -47,6 +48,7 @@ export class Terminal implements TerminalCommandContext {
 
   private readonly scroller = viewChild<ElementRef<HTMLElement>>('scroller');
   private readonly capture = viewChild<ElementRef<HTMLInputElement>>('capture');
+  private readonly settings = inject(SettingsStore);
   private readonly store = inject(CommandStore);
 
   /*
@@ -55,8 +57,18 @@ export class Terminal implements TerminalCommandContext {
     and the prompt would butt straight into the text ("❯ls"). whitespace-pre-wrap
     on the line preserves it here.
   */
+  /**
+   * This visitor's name, loaded from IndexedDB. `guest` shows for the moment
+   * before it resolves, because IndexedDB reads are asynchronous where a
+   * configured `user` is not.
+   */
+  private readonly guest = signal<string | null>(null);
+
+  /** A configured user pins the name; otherwise guests get a generated one. */
+  protected readonly user = computed(() => this.config.user ?? this.guest() ?? 'guest');
+
   protected readonly prompt = computed(
-    () => `${this.config.user}@${this.config.host} ${this.config.cwd} ${this.config.promptSymbol} `,
+    () => `${this.user()}@${this.config.host} ${this.config.cwd} ${this.config.promptSymbol} `,
   );
 
   /** PS2, shown on every continuation line. */
@@ -113,6 +125,17 @@ export class Terminal implements TerminalCommandContext {
     });
 
     void this.restore();
+
+    // Both reads can land after the view is gone, so guard the writes.
+    let alive = true;
+    destroyRef.onDestroy(() => {
+      alive = false;
+    });
+    if (!this.config.user) {
+      void this.settings.guestName().then((name) => {
+        if (alive) this.guest.set(name);
+      });
+    }
   }
 
   /**

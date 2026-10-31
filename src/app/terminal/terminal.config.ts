@@ -8,7 +8,12 @@
  * `font-terminal` / `text-terminal` / `leading-terminal` utilities read.
  */
 export interface TerminalConfig {
-  readonly user: string;
+  /**
+   * The name before the `@`. Omit it to show a generated guest name; set it to
+   * pin one, which is also where a logged-in user or a backend-supplied
+   * username belongs.
+   */
+  readonly user?: string;
   readonly host: string;
   readonly cwd: string;
   readonly promptSymbol: string;
@@ -31,9 +36,13 @@ export interface TerminalConfig {
 }
 
 export const FICTIONAL_TERMINAL: TerminalConfig = {
-  user: 'mjerta',
-  host: 'surface',
-  cwd: '~/develop/projects/mpdev-terminal-frontend',
+  // user intentionally unset: guests get a generated name, see settings.store.ts.
+  // A project label, not a machine: a browser cannot read a hostname, so this
+  // claims nothing about whoever is looking at it.
+  host: 'mpdev',
+  // Deliberately bare: this is a fictional prompt, so claim only the home
+  // directory rather than inventing a path that implies a real checkout.
+  cwd: '~',
   promptSymbol: '❯',
   continuationSymbol: '>',
   font: {
