@@ -9,7 +9,7 @@
  * consumer.
  */
 export interface TerminalCommandContext {
-  /** Wipe the scrollback, in memory and in the persisted store. */
+  /** Erase the screen. The command history is deliberately left untouched. */
   clearScreen(): void;
   /** The commands typed so far, oldest first, with line continuations spliced. */
   commandList(): readonly string[];

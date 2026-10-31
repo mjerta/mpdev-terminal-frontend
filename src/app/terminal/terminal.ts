@@ -1,7 +1,7 @@
 import { Component, DestroyRef, ElementRef, afterRenderEffect, computed, effect, inject, signal, viewChild } from '@angular/core';
+import { CommandStore } from './command.store';
 import { findCommand, TerminalCommandContext } from './commands';
-import { HistoryStore } from './history.store';
-import { LineKind, RenderLine, trailingBackslashes } from './line';
+import { LineKind, RenderLine, spliceBlock, trailingBackslashes } from './line';
 import { FICTIONAL_TERMINAL, TerminalConfig } from './terminal.config';
 
 /**
@@ -17,7 +17,11 @@ import { FICTIONAL_TERMINAL, TerminalConfig } from './terminal.config';
  * typed" true, which is what stops a soft wrap from being confused with a real
  * newline.
  *
- * Scrollback is persisted to IndexedDB and reloaded on startup.
+ * Two separate things are held here, which is deliberate:
+ * - `scrollback` is what is on screen. Session-only, and what `clear` erases.
+ * - `commands` is the history of what you typed. Persisted, and untouched by
+ *   `clear`. Deriving one from the other is what made `clear` eat history, which
+ *   no real shell does.
  */
 @Component({
   selector: 'app-terminal',
@@ -27,8 +31,10 @@ import { FICTIONAL_TERMINAL, TerminalConfig } from './terminal.config';
 export class Terminal implements TerminalCommandContext {
   protected readonly config: TerminalConfig = FICTIONAL_TERMINAL;
 
-  /** Committed lines, oldest first. Empty entries are kept: a real shell shows a fresh prompt. */
-  protected readonly history = signal<readonly RenderLine[]>([]);
+  /** Lines on screen, oldest first. Empty entries are kept: a shell still shows a prompt. */
+  protected readonly scrollback = signal<readonly RenderLine[]>([]);
+  /** The persisted command history, oldest first. */
+  private readonly commands = signal<readonly string[]>([]);
   /** What is currently typed after the prompt; may span several lines. */
   protected readonly input = signal('');
 
@@ -41,7 +47,7 @@ export class Terminal implements TerminalCommandContext {
 
   private readonly scroller = viewChild<ElementRef<HTMLElement>>('scroller');
   private readonly capture = viewChild<ElementRef<HTMLInputElement>>('capture');
-  private readonly store = inject(HistoryStore);
+  private readonly store = inject(CommandStore);
 
   /*
     Trailing space is part of the prompt, not markup: Angular strips whitespace
@@ -57,9 +63,9 @@ export class Terminal implements TerminalCommandContext {
   protected readonly continuationPrompt = computed(() => `${this.config.continuationSymbol} `);
 
   /**
-   * The prompt a committed line is drawn with. Output lines get an empty string
-   * rather than being skipped, so their text still starts at column 0 while the
-   * markup stays uniform across the loop.
+   * The prompt a line is drawn with. Output lines get an empty string rather than
+   * being skipped, so their text still starts at column 0 while the markup stays
+   * uniform across the loop.
    */
   protected promptFor(kind: LineKind): string {
     if (kind === 'primary') return this.prompt();
@@ -98,11 +104,11 @@ export class Terminal implements TerminalCommandContext {
     // newest line off screen. Reading the signals here registers them as
     // dependencies, so this runs again after every edit.
     afterRenderEffect(() => {
-      this.history();
+      this.scrollback();
       this.input();
       const el = this.scroller()?.nativeElement;
       // Only follow the output if the user is already parked at the bottom, so
-      // scrolling back through history is not yanked away by the next line.
+      // scrolling back through the log is not yanked away by the next line.
       if (el && this.atBottom) el.scrollTop = el.scrollHeight;
     });
 
@@ -110,14 +116,18 @@ export class Terminal implements TerminalCommandContext {
   }
 
   /**
-   * Prepend whatever was persisted. Prepending rather than setting means a line
-   * committed while the read was in flight cannot be lost, whichever order the
-   * two resolve in.
+   * Load the saved command history. Prepending rather than setting means a command
+   * recorded while the read is in flight cannot be lost, whichever order the two
+   * resolve in.
+   *
+   * The screen itself is not restored: reloading opens a fresh session with a
+   * blank scrollback and the full history behind it, which is what opening a new
+   * terminal tab does.
    */
   private async restore(): Promise<void> {
     const stored = await this.store.load();
     if (stored.length === 0) return;
-    this.history.update((current) => [...stored.map(({ text, kind }) => ({ text, kind })), ...current]);
+    this.commands.update((current) => [...stored.map((command) => command.text), ...current]);
   }
 
   /** Track whether the user is at the bottom, which decides if we auto-follow. */
@@ -235,75 +245,63 @@ export class Terminal implements TerminalCommandContext {
 
     this.input.set('');
 
-    // Echo first, then run. A real terminal keeps the command line in the
-    // scrollback with the output under it, and bash has already recorded
-    // `history` by the time it prints — so `history` shows itself as the last
-    // entry. `clear` still wipes the echo it just made, which is the effect you
-    // see in a shell.
-    this.recordBlock(buffer);
+    // Splice once, up front: the command that runs, the command remembered and the
+    // command `history` prints are all the same one string, so they cannot drift.
+    const command = spliceBlock(buffer);
 
-    // Commands see the spliced one-liner, so `clear \` + Enter + Enter runs
-    // clear rather than looking like an unknown command named "clear ".
-    const invocation = findCommand(buffer.split('\n').join(''));
+    // Echo before running. A real terminal leaves the command line on screen with
+    // its output under it, and bash has already recorded `history` by the time it
+    // prints, so `history` lists itself last.
+    this.recordBlock(buffer);
+    this.rememberCommand(command);
+
+    const invocation = findCommand(command);
     if (invocation) {
       invocation.command.run(this, invocation.args);
     }
   }
 
-  /** Echo a finished block into the scrollback, one entry per physical line. */
+  /** Echo a finished block on screen, one entry per physical line. Not persisted. */
   private recordBlock(buffer: string): void {
     const lines: RenderLine[] = buffer.split('\n').map((text, index) => ({
       text,
       kind: index === 0 ? 'primary' : 'continuation',
     }));
-    this.history.update((history) => [...history, ...lines]);
+    this.scrollback.update((scrollback) => [...scrollback, ...lines]);
+  }
 
-    const at = Date.now();
-    void this.store.append(lines.map((line) => ({ ...line, at })));
+  /** Add to the history bash-style: blank lines are not commands, so not kept. */
+  private rememberCommand(command: string): void {
+    if (command.trim() === '') return;
+    this.commands.update((commands) => [...commands, command]);
+    void this.store.append(command);
   }
 
   /**
    * The `clear` command. Public because TerminalCommandContext requires it.
    *
-   * Re-pins to the bottom afterwards: the old last line is gone, and a stale
-   * false here would leave a cleared terminal refusing to follow new input.
+   * Clears the screen only: the command history and the persisted log are left
+   * alone, which is what a real terminal does, since its history lives in a file
+   * rather than in the scrollback.
+   *
+   * Re-pins to the bottom afterwards: the old last line is gone, and a stale false
+   * here would leave a cleared terminal refusing to follow new input.
    */
   clearScreen(): void {
-    this.history.set([]);
+    this.scrollback.set([]);
     this.atBottom = true;
-    void this.store.clear();
   }
 
-  /**
-   * The typed commands, re-spliced. `clear` erases the scrollback, so history
-   * resets with it — which is what `clear` does in a shell that keeps its
-   * history in the visible buffer.
-   *
-   * Continuation lines are appended to the command before them with no
-   * separator, because submit() already removed the splicing backslash and the
-   * space that belonged to it stayed on the first line.
-   */
+  /** The remembered commands, oldest first. Survives `clear` and survives reload. */
   commandList(): readonly string[] {
-    const commands: string[] = [];
-    for (const line of this.history()) {
-      if (line.kind === 'primary') {
-        // Blank lines are not commands; bash does not remember them either.
-        if (line.text.trim() !== '') commands.push(line.text);
-      } else if (line.kind === 'continuation' && commands.length > 0) {
-        // Concatenated raw: the space before a splicing backslash belongs to the
-        // command, so `ls -la \` + `-lah` must re-splice to `ls -la -lah`, not
-        // `ls -la-lah`.
-        commands[commands.length - 1] += line.text;
-      }
-    }
-    return commands;
+    return this.commands();
   }
 
-  /** Machine output: drawn without a prompt and deliberately never persisted. */
+  /** Machine output: drawn without a prompt, on screen only. */
   printOutput(lines: readonly string[]): void {
     if (lines.length === 0) return;
     const output = lines.map((text) => ({ text, kind: 'output' as const }));
-    this.history.update((history) => [...history, ...output]);
+    this.scrollback.update((scrollback) => [...scrollback, ...output]);
   }
 
   private settleCaret(): void {
