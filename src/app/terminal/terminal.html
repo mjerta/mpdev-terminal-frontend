@@ -9,7 +9,8 @@
       <p class="break-all whitespace-pre-wrap" [class.prompt-gap]="showsGapBefore(line.kind)">
         @for (seg of segmentsFor(line.kind); track $index) {
           <span [class]="seg.classes">{{ seg.text }}</span>
-        }<span>{{ line.text }}</span>
+        }
+        <span>{{ line.text }}</span>
       </p>
     }
 
@@ -25,7 +26,8 @@
       >
         @for (seg of liveSegments($index === 0); track $index) {
           <span [class]="seg.classes">{{ seg.text }}</span>
-        }<span>{{ line }}</span>
+        }
+        <span>{{ line }}</span>
         @if ($last) {
           <span class="caret" [class.caret--steady]="typing()"></span>
         }

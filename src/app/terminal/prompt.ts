@@ -38,6 +38,9 @@ export interface PromptParts {
   readonly host: string;
   readonly cwd: string;
   readonly symbol: string;
+  readonly errorSymbol: string;
+  /** True when the previous command exited non-zero, which swaps the glyph. */
+  readonly failed: boolean;
   readonly showIdentity: boolean;
 }
 
@@ -50,7 +53,10 @@ export function buildPrompt(parts: PromptParts): readonly PromptSegment[] {
 
   segments.push(
     { text: `${parts.cwd} `, classes: EMPHASIS },
-    { text: `${parts.symbol} `, classes: EMPHASIS },
+    // Success and failure share EMPHASIS because the config styles both bold
+    // cyan; only the glyph moves. Adding a red error hue would be inventing a
+    // rule this prompt's own configuration does not have.
+    { text: `${parts.failed ? parts.errorSymbol : parts.symbol} `, classes: EMPHASIS },
   );
   return segments;
 }

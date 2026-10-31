@@ -78,10 +78,34 @@ const help: TerminalCommand = {
 
 export const TERMINAL_COMMANDS: readonly TerminalCommand[] = [clear, history, help];
 
+/** bash's conventional exit code for a command it could not find. */
+export const EXIT_NOT_FOUND = 127;
+
+/**
+ * The reply for input that names no command, worded the way bash words it:
+ * `bash: foo: command not found`.
+ *
+ * Only the command name is reported, not the whole line, because that is what
+ * bash prints: the arguments belong to a command that never got as far as
+ * parsing them.
+ */
+export function commandNotFound(shell: string, name: string): string {
+  return `${shell}: ${name}: command not found`;
+}
+
 export interface Invocation {
   readonly command: TerminalCommand;
   readonly args: readonly string[];
 }
+
+/**
+ * Resolved rather than optional, so the caller has to handle the not-found case
+ * instead of glossing over an `undefined`. The failure arm keeps the name, since
+ * that is exactly what the reply needs to report.
+ */
+export type CommandResolution =
+  | ({ readonly found: true } & Invocation)
+  | { readonly found: false; readonly name: string; readonly args: readonly string[] };
 
 /**
  * Match by exact first token, so `clearx` is not a command while `clear -x` is.
@@ -89,8 +113,8 @@ export interface Invocation {
  * Arguments are handed to the command untouched: `clear` ignores the tput
  * options it cannot honour, while `history` reads its count from them.
  */
-export function findCommand(line: string): Invocation | undefined {
+export function resolveCommand(line: string): CommandResolution {
   const [name = '', ...args] = line.trim().split(/\s+/);
   const command = TERMINAL_COMMANDS.find((candidate) => candidate.name === name);
-  return command ? { command, args } : undefined;
+  return command ? { found: true, command, args } : { found: false, name, args };
 }

@@ -18,6 +18,18 @@ export interface TerminalConfig {
   readonly cwd: string;
   readonly promptSymbol: string;
   /**
+   * `[character] error_symbol`, shown when the previous command exited non-zero.
+   * Your config renders it bold cyan exactly like success_symbol, so only the
+   * glyph changes: `✗` rather than `❯`.
+   */
+  readonly errorSymbol: string;
+  /**
+   * Name the shell reports itself as when a command is not found, matching
+   * `bash: foo: command not found`. Your `$SHELL` is bash, so this mirrors the
+   * machine the fiction is standing in for.
+   */
+  readonly shell: string;
+  /**
    * The continuation marker, i.e. PS2. Starship leaves PS2 alone, so a real
    * shell falls back to bash's `>`; we mirror that rather than invent a style.
    */
@@ -55,6 +67,8 @@ export const FICTIONAL_TERMINAL: TerminalConfig = {
   // directory rather than inventing a path that implies a real checkout.
   cwd: '~',
   promptSymbol: '❯',
+  errorSymbol: '✗',
+  shell: 'bash',
   continuationSymbol: '>',
   addNewline: true,
   showUserHost: true,

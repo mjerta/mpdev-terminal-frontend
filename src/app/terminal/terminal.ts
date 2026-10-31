@@ -1,6 +1,21 @@
-import { Component, DestroyRef, ElementRef, afterRenderEffect, computed, effect, inject, signal, viewChild } from '@angular/core';
+import {
+  Component,
+  DestroyRef,
+  ElementRef,
+  afterRenderEffect,
+  computed,
+  effect,
+  inject,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { CommandStore } from './command.store';
-import { findCommand, TerminalCommandContext } from './commands';
+import {
+  commandNotFound,
+  EXIT_NOT_FOUND,
+  resolveCommand,
+  TerminalCommandContext,
+} from './commands';
 import { SettingsStore } from './settings.store';
 import { LineKind, RenderLine, spliceBlock, trailingBackslashes } from './line';
 import { buildContinuation, buildPrompt, PromptSegment } from './prompt';
@@ -75,12 +90,27 @@ export class Terminal implements TerminalCommandContext {
     this machine. Trailing spaces live inside the segment text, since the Angular
     compiler strips whitespace between inline elements.
   */
+  /**
+   * Exit status of the last command, null until one has run. starship's whole
+   * success/error symbol mechanism rests on this, so it is kept explicitly
+   * rather than as a boolean: a real `$?` is a number.
+   */
+  private readonly lastStatus = signal<number | null>(null);
+
+  /** Null means "nothing has run yet", which is not a failure. */
+  private readonly failed = computed(() => {
+    const status = this.lastStatus();
+    return status !== null && status !== 0;
+  });
+
   protected readonly promptSegments = computed(() =>
     buildPrompt({
       user: this.user(),
       host: this.config.host,
       cwd: this.config.cwd,
       symbol: this.config.promptSymbol,
+      errorSymbol: this.config.errorSymbol,
+      failed: this.failed(),
       showIdentity: this.config.showUserHost,
     }),
   );
@@ -316,10 +346,23 @@ export class Terminal implements TerminalCommandContext {
     this.recordBlock(buffer);
     this.rememberCommand(command);
 
-    const invocation = findCommand(command);
-    if (invocation) {
-      invocation.command.run(this, invocation.args);
+    // An empty line runs nothing: bash prints no reply and leaves $? untouched,
+    // so this must return before the not-found path can claim the blank as a
+    // missing command named "".
+    if (command.trim() === '') return;
+
+    const resolution = resolveCommand(command);
+
+    if (resolution.found) {
+      // Nothing here can fail yet, so a completed command is status 0. When a
+      // real exec lands, it should set whatever the child exited with instead.
+      resolution.command.run(this, resolution.args);
+      this.lastStatus.set(0);
+      return;
     }
+
+    this.printOutput([commandNotFound(this.config.shell, resolution.name)]);
+    this.lastStatus.set(EXIT_NOT_FOUND);
   }
 
   /** Echo a finished block on screen, one entry per physical line. Not persisted. */
@@ -368,6 +411,9 @@ export class Terminal implements TerminalCommandContext {
   private settleCaret(): void {
     this.typing.set(true);
     clearTimeout(this.typingTimer);
-    this.typingTimer = setTimeout(() => this.typing.set(false), this.config.cursor.steadyAfterKeyMs);
+    this.typingTimer = setTimeout(
+      () => this.typing.set(false),
+      this.config.cursor.steadyAfterKeyMs,
+    );
   }
 }
