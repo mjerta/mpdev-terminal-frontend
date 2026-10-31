@@ -103,17 +103,28 @@ export class Terminal implements TerminalCommandContext {
     return status !== null && status !== 0;
   });
 
-  protected readonly promptSegments = computed(() =>
-    buildPrompt({
+  /**
+   * Both prompt variants, built once and cached.
+   *
+   * Two arrays rather than one, so each committed line keeps the glyph it was
+   * echoed with while the live line follows the current status. A single
+   * status-driven array is the bug this avoids: every prompt in the scrollback
+   * would flip to `✗` the first time a command failed.
+   */
+  private readonly promptVariants = computed(() => {
+    const shared = {
       user: this.user(),
       host: this.config.host,
       cwd: this.config.cwd,
       symbol: this.config.promptSymbol,
       errorSymbol: this.config.errorSymbol,
-      failed: this.failed(),
       showIdentity: this.config.showUserHost,
-    }),
-  );
+    };
+    return {
+      ok: buildPrompt({ ...shared, failed: false }),
+      failed: buildPrompt({ ...shared, failed: true }),
+    };
+  });
 
   /** PS2 for continuation lines. */
   protected readonly continuationSegments = computed(() =>
@@ -121,19 +132,22 @@ export class Terminal implements TerminalCommandContext {
   );
 
   /**
-   * Segments for a committed line. Output lines get a shared empty array rather
-   * than being special-cased in the template, and every branch returns a stable
-   * reference so the inner loop does not re-render on unrelated change detection.
+   * Segments for a committed line. Takes the whole line, not just its kind,
+   * because the glyph depends on the status recorded when it was echoed. Output
+   * lines get a shared empty array, and every branch returns a stable reference
+   * so the inner loop does not re-render on unrelated change detection.
    */
-  protected segmentsFor(kind: LineKind): readonly PromptSegment[] {
-    if (kind === 'primary') return this.promptSegments();
-    if (kind === 'continuation') return this.continuationSegments();
+  protected segmentsFor(line: RenderLine): readonly PromptSegment[] {
+    if (line.kind === 'primary')
+      return line.failed ? this.promptVariants().failed : this.promptVariants().ok;
+    if (line.kind === 'continuation') return this.continuationSegments();
     return NO_SEGMENTS;
   }
 
   /** The line being typed: PS1 on its first line, PS2 on any that follow. */
   protected liveSegments(isFirst: boolean): readonly PromptSegment[] {
-    return isFirst ? this.promptSegments() : this.continuationSegments();
+    if (!isFirst) return this.continuationSegments();
+    return this.failed() ? this.promptVariants().failed : this.promptVariants().ok;
   }
 
   /**
@@ -367,9 +381,16 @@ export class Terminal implements TerminalCommandContext {
 
   /** Echo a finished block on screen, one entry per physical line. Not persisted. */
   private recordBlock(buffer: string): void {
+    /*
+      Read the status *now*, before anything runs: this is the glyph the prompt
+      was actually showing while the line was being typed. By the time submit
+      resolves the command, lastStatus has already moved on.
+    */
+    const failed = this.failed();
     const lines: RenderLine[] = buffer.split('\n').map((text, index) => ({
       text,
       kind: index === 0 ? 'primary' : 'continuation',
+      failed,
     }));
     this.scrollback.update((scrollback) => [...scrollback, ...lines]);
   }

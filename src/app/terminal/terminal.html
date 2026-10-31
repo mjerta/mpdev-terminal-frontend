@@ -7,7 +7,7 @@
   >
     @for (line of scrollback(); track $index) {
       <p class="break-all whitespace-pre-wrap" [class.prompt-gap]="showsGapBefore(line.kind)">
-        @for (seg of segmentsFor(line.kind); track $index) {
+        @for (seg of segmentsFor(line); track $index) {
           <span [class]="seg.classes">{{ seg.text }}</span>
         }
         <span>{{ line.text }}</span>
