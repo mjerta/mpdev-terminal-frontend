@@ -7,8 +7,16 @@
     <!-- viewport-fit=cover lets the layout reach the physical screen edges; the
          safe-area padding on <main> then keeps content off the notch, the iOS
          home indicator and Android's system navigation buttons. Without
-         viewport-fit=cover every env(safe-area-inset-*) resolves to 0px. -->
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+         viewport-fit=cover every env(safe-area-inset-*) resolves to 0px.
+
+         interactive-widget=resizes-content (Chromium) makes the on-screen
+         keyboard shrink the layout viewport itself, so 100dvh already excludes
+         the keyboard before any script runs. Safari ignores it, which is why
+         visual-viewport.ts exists; both agree on the resulting height. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
+    />
     <link rel="icon" type="image/x-icon" href="favicon.ico" />
   </head>
   <body class="grow flex min-w-0 flex-col">

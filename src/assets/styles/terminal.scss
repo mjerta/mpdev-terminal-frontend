@@ -1,0 +1,29 @@
+@theme {
+  /*
+    Terminal geometry as design tokens, so the Tailwind utilities
+    font-terminal / text-terminal / leading-terminal exist and every cell
+    measurement in the app resolves from one place. app/Terminal pushes the
+    config's font values onto its own host element, overriding these defaults
+    at runtime; these stay as the pre-init fallback.
+  */
+  --font-terminal:
+    'JetBrainsMono Nerd Font', 'JetBrainsMono NF', 'Adwaita Mono', ui-monospace, monospace;
+  --text-terminal: 0.9375rem;
+  --leading-terminal: 1.45;
+
+  /*
+    step-end holds each keyframe's value until the next one, so a single 50% stop
+    gives a hard on/off blink instead of Tailwind's eased animate-pulse fade.
+    Deliberately a literal duration, not var(--caret-cycle): a nested var() here
+    would be substituted at :root, where the override is not visible, so a
+    descendant could never retune it. app/Terminal writes this whole shorthand
+    from its config instead.
+  */
+  --animate-caret: caret-blink 1060ms step-end infinite;
+
+  @keyframes caret-blink {
+    50% {
+      opacity: 0;
+    }
+  }
+}

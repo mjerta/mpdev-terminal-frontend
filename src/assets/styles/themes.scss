@@ -25,8 +25,15 @@
   One viewport tall, full stop. 100vh is the *large* viewport on phones: it is
   measured as if the browser toolbar were hidden, so the shell ends up taller
   than the screen and the page scrolls to reveal the excess. 100dvh tracks the
-  area that is actually visible. The 100vh line above stays as the fallback for
-  browsers without dynamic viewport units.
+  area that is actually visible; the 100vh line below stays as the fallback for
+  browsers without dynamic units.
+
+  --viewport-height, published by the VisibleViewport service, beats both of them
+  because unlike any viewport unit it also accounts for the on-screen keyboard:
+  Android resizes only the visual viewport when the keyboard opens, so a dvh
+  shell keeps its full height and buries the live prompt line - the one line that
+  must stay readable - behind the keyboard. It is simply unset before the service
+  runs, or where the API is missing, and the dvh value applies as normal.
 
   An explicit height (not min-height) keeps the size definite all the way down
   the flex chain, which is what lets content fill the remaining space without
@@ -34,7 +41,7 @@
 */
 html {
   height: 100vh;
-  height: 100dvh;
+  height: var(--viewport-height, 100dvh);
 }
 
 /*
