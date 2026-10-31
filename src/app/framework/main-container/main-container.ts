@@ -2,12 +2,13 @@ import { Component, signal } from '@angular/core';
 import { ThemeDropdown } from '../../ui-elements/theme-dropdown/theme-dropdown';
 import { Card } from '../../ui-elements/card/card';
 import { CardGrid } from '../../ui-elements/card-grid/card-grid';
+import { Terminal } from '../../terminal/terminal';
 import { THEMES } from '../themes';
 
 @Component({
   selector: 'app-main-container',
   standalone: true,
-  imports: [ThemeDropdown, Card, CardGrid],
+  imports: [ThemeDropdown, Card, CardGrid, Terminal],
   templateUrl: './main-container.html',
   styleUrl: './main-container.scss',
 })
