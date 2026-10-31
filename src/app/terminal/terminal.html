@@ -7,7 +7,7 @@
   >
     @for (line of scrollback(); track $index) {
       <p class="break-all whitespace-pre-wrap">
-        <span class="text-primary">{{ promptFor(line.kind) }}</span><span>{{ line.text }}</span>
+        <span class="text-primary" [title]="hostSource()">{{ promptFor(line.kind) }}</span><span>{{ line.text }}</span>
       </p>
     }
 
@@ -20,7 +20,7 @@
     -->
     @for (line of logicalLines(); track $index) {
       <p class="break-all whitespace-pre-wrap">
-        <span class="text-primary">{{ $index === 0 ? prompt() : continuationPrompt() }}</span><span>{{ line }}</span>
+        <span class="text-primary" [title]="hostSource()">{{ $index === 0 ? prompt() : continuationPrompt() }}</span><span>{{ line }}</span>
         @if ($last) {
           <span class="caret" [class.caret--steady]="typing()"></span>
         }

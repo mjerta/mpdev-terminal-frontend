@@ -1,15 +1,24 @@
 /**
- * Fictional system information for the prototype terminal.
+ * Settings for the prototype terminal.
  *
- * Nothing here is discovered from the real host: it is a hand-written map that
- * describes what the fake prompt should claim, and the same shape a real
- * backend/PTY would eventually fill in. The font values are pushed onto the
- * host element as custom properties, which is what the Tailwind
- * `font-terminal` / `text-terminal` / `leading-terminal` utilities read.
+ * Most of this is hand-written fiction: the same shape a real backend/PTY would
+ * eventually fill in. `host` is the exception — left unset here so the prompt
+ * shows the device the visitor is actually on, detected in platform.ts. A
+ * browser cannot read a machine's hostname, so that label is a best-effort
+ * device class rather than a fact.
+ *
+ * The font values are pushed onto the host element as custom properties, which
+ * is what the Tailwind `font-terminal` / `text-terminal` / `leading-terminal`
+ * utilities read.
  */
 export interface TerminalConfig {
   readonly user: string;
-  readonly host: string;
+  /**
+   * The name shown after the `@`. Omit it to show the device the visitor is
+   * actually on, detected in platform.ts; set it to pin the prompt to a fixed
+   * name, which is also what a real backend/PTY should do later.
+   */
+  readonly host?: string;
   readonly cwd: string;
   readonly promptSymbol: string;
   /**
@@ -32,7 +41,7 @@ export interface TerminalConfig {
 
 export const FICTIONAL_TERMINAL: TerminalConfig = {
   user: 'mjerta',
-  host: 'surface',
+  // host intentionally unset: the prompt shows the detected device instead.
   cwd: '~/develop/projects/mpdev-terminal-frontend',
   promptSymbol: '❯',
   continuationSymbol: '>',
