@@ -1,6 +1,7 @@
 import { Component, DestroyRef, ElementRef, afterRenderEffect, computed, effect, inject, signal, viewChild } from '@angular/core';
+import { findCommand, TerminalCommandContext } from './commands';
 import { HistoryStore } from './history.store';
-import { RenderLine, trailingBackslashes } from './line';
+import { LineKind, RenderLine, trailingBackslashes } from './line';
 import { FICTIONAL_TERMINAL, TerminalConfig } from './terminal.config';
 
 /**
@@ -23,7 +24,7 @@ import { FICTIONAL_TERMINAL, TerminalConfig } from './terminal.config';
   templateUrl: './terminal.html',
   styleUrl: './terminal.scss',
 })
-export class Terminal {
+export class Terminal implements TerminalCommandContext {
   protected readonly config: TerminalConfig = FICTIONAL_TERMINAL;
 
   /** Committed lines, oldest first. Empty entries are kept: a real shell shows a fresh prompt. */
@@ -54,6 +55,17 @@ export class Terminal {
 
   /** PS2, shown on every continuation line. */
   protected readonly continuationPrompt = computed(() => `${this.config.continuationSymbol} `);
+
+  /**
+   * The prompt a committed line is drawn with. Output lines get an empty string
+   * rather than being skipped, so their text still starts at column 0 while the
+   * markup stays uniform across the loop.
+   */
+  protected promptFor(kind: LineKind): string {
+    if (kind === 'primary') return this.prompt();
+    if (kind === 'continuation') return this.continuationPrompt();
+    return '';
+  }
 
   /** Always at least one entry, so the caret has a line to sit on. */
   protected readonly logicalLines = computed(() => this.input().split('\n'));
@@ -221,20 +233,77 @@ export class Terminal {
       return;
     }
 
-    this.commitBlock(buffer);
+    this.input.set('');
+
+    // Echo first, then run. A real terminal keeps the command line in the
+    // scrollback with the output under it, and bash has already recorded
+    // `history` by the time it prints — so `history` shows itself as the last
+    // entry. `clear` still wipes the echo it just made, which is the effect you
+    // see in a shell.
+    this.recordBlock(buffer);
+
+    // Commands see the spliced one-liner, so `clear \` + Enter + Enter runs
+    // clear rather than looking like an unknown command named "clear ".
+    const invocation = findCommand(buffer.split('\n').join(''));
+    if (invocation) {
+      invocation.command.run(this, invocation.args);
+    }
   }
 
-  /** Store every physical line, tagged with the prompt it was typed at. */
-  private commitBlock(buffer: string): void {
+  /** Echo a finished block into the scrollback, one entry per physical line. */
+  private recordBlock(buffer: string): void {
     const lines: RenderLine[] = buffer.split('\n').map((text, index) => ({
       text,
       kind: index === 0 ? 'primary' : 'continuation',
     }));
     this.history.update((history) => [...history, ...lines]);
-    this.input.set('');
 
     const at = Date.now();
     void this.store.append(lines.map((line) => ({ ...line, at })));
+  }
+
+  /**
+   * The `clear` command. Public because TerminalCommandContext requires it.
+   *
+   * Re-pins to the bottom afterwards: the old last line is gone, and a stale
+   * false here would leave a cleared terminal refusing to follow new input.
+   */
+  clearScreen(): void {
+    this.history.set([]);
+    this.atBottom = true;
+    void this.store.clear();
+  }
+
+  /**
+   * The typed commands, re-spliced. `clear` erases the scrollback, so history
+   * resets with it — which is what `clear` does in a shell that keeps its
+   * history in the visible buffer.
+   *
+   * Continuation lines are appended to the command before them with no
+   * separator, because submit() already removed the splicing backslash and the
+   * space that belonged to it stayed on the first line.
+   */
+  commandList(): readonly string[] {
+    const commands: string[] = [];
+    for (const line of this.history()) {
+      if (line.kind === 'primary') {
+        // Blank lines are not commands; bash does not remember them either.
+        if (line.text.trim() !== '') commands.push(line.text);
+      } else if (line.kind === 'continuation' && commands.length > 0) {
+        // Concatenated raw: the space before a splicing backslash belongs to the
+        // command, so `ls -la \` + `-lah` must re-splice to `ls -la -lah`, not
+        // `ls -la-lah`.
+        commands[commands.length - 1] += line.text;
+      }
+    }
+    return commands;
+  }
+
+  /** Machine output: drawn without a prompt and deliberately never persisted. */
+  printOutput(lines: readonly string[]): void {
+    if (lines.length === 0) return;
+    const output = lines.map((text) => ({ text, kind: 'output' as const }));
+    this.history.update((history) => [...history, ...output]);
   }
 
   private settleCaret(): void {

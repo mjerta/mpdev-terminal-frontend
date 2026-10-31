@@ -1,9 +1,10 @@
 /**
- * Which prompt a line was typed at. `primary` is PS1 (the starship-flavoured
- * prompt), `continuation` is PS2 (what bash shows after a trailing backslash or
- * an unfinished construct).
+ * Which prompt a line was typed at, or none at all. `primary` is PS1 (the
+ * starship-flavoured prompt), `continuation` is PS2 (what bash shows after a
+ * trailing backslash), and `output` is machine text a command printed, which
+ * carries no prompt.
  */
-export type LineKind = 'primary' | 'continuation';
+export type LineKind = 'primary' | 'continuation' | 'output';
 
 /** One physical line of scrollback, in the shape the template renders it. */
 export interface RenderLine {
@@ -11,7 +12,11 @@ export interface RenderLine {
   readonly kind: LineKind;
 }
 
-/** A persisted line. `seq` is filled in by IndexedDB's autoIncrement on read. */
+/**
+ * A persisted line. Only typed lines are stored: `output` lives in memory, so
+ * what survives a reload is the history of commands, not a transcript of the
+ * screen. `seq` is filled in by IndexedDB's autoIncrement on read.
+ */
 export interface StoredLine extends RenderLine {
   readonly at: number;
   readonly seq?: number;

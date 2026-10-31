@@ -7,7 +7,7 @@
   >
     @for (line of history(); track $index) {
       <p class="break-all whitespace-pre-wrap">
-        <span class="text-primary">{{ line.kind === "primary" ? prompt() : continuationPrompt() }}</span><span>{{ line.text }}</span>
+        <span class="text-primary">{{ promptFor(line.kind) }}</span><span>{{ line.text }}</span>
       </p>
     }
 

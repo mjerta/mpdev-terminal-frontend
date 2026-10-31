@@ -70,6 +70,28 @@ export class HistoryStore {
     }
   }
 
+  /**
+   * Empty the whole log, for the `clear` command. Wipe the store too: clearing
+   * only the in-memory scrollback would have the whole history resurrect itself
+   * on the next reload.
+   */
+  async clear(): Promise<void> {
+    const db = await this.open();
+    if (!db) return;
+
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(HistoryStore.STORE, 'readwrite');
+        tx.objectStore(HistoryStore.STORE).clear();
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+        tx.onabort = () => reject(tx.error);
+      });
+    } catch (error) {
+      console.warn('[terminal] history could not be cleared', error);
+    }
+  }
+
   /** Open once and reuse: every call would otherwise re-run the upgrade dance. */
   private open(): Promise<IDBDatabase | null> {
     this.database ??= new Promise((resolve) => {
