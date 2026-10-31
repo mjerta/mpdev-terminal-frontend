@@ -3,7 +3,6 @@ import { CommandStore } from './command.store';
 import { findCommand, TerminalCommandContext } from './commands';
 import { LineKind, RenderLine, spliceBlock, trailingBackslashes } from './line';
 import { FICTIONAL_TERMINAL, TerminalConfig } from './terminal.config';
-import { ClientIdentity, describeClient, readClientHints } from './platform';
 
 /**
  * A fictional terminal: no PTY, no shell, no input element doing the work.
@@ -51,25 +50,13 @@ export class Terminal implements TerminalCommandContext {
   private readonly store = inject(CommandStore);
 
   /*
-    The machine name, resolved from the least-lying signal available. A browser
-    cannot read a hostname, so this is a device model where Chromium will give one
-    (`navigator.userAgentData.getHighEntropyValues(['model'])` really returns
-    "Pixel 7" on a Pixel) and a platform class everywhere else. `config.host`
-    overrides it outright, which is where a backend reporting os.hostname()
-    belongs. Resolved asynchronously, so it starts undefined-ish and fills in.
-  */
-  private readonly client = signal<ClientIdentity>({ label: 'unknown', source: 'unknown' });
-
-  protected readonly hostName = computed(() => this.config.host ?? this.client().label);
-
-  /*
     Trailing space is part of the prompt, not markup: Angular strips whitespace
     between inline elements, so `</span> <span>` would not survive compilation
     and the prompt would butt straight into the text ("❯ls"). whitespace-pre-wrap
     on the line preserves it here.
   */
   protected readonly prompt = computed(
-    () => `${this.config.user}@${this.hostName()} ${this.config.cwd} ${this.config.promptSymbol} `,
+    () => `${this.config.user}@${this.config.host} ${this.config.cwd} ${this.config.promptSymbol} `,
   );
 
   /** PS2, shown on every continuation line. */
@@ -85,25 +72,6 @@ export class Terminal implements TerminalCommandContext {
     if (kind === 'continuation') return this.continuationPrompt();
     return '';
   }
-
-  /**
-   * Shown as a tooltip on the prompt. The label for an Android phone really is
-   * its model, while `linux` is a UA-string guess, so the provenance is worth
-   * exposing rather than presenting every tier as the same quality of fact.
-   */
-  protected readonly hostSource = computed(() => {
-    if (this.config.host) return 'pinned by config';
-    switch (this.client().source) {
-      case 'model':
-        return 'device model (UA-CH)';
-      case 'platform':
-        return 'platform hint (UA-CH)';
-      case 'user-agent':
-        return 'guessed from the user-agent string';
-      default:
-        return 'not reported by this browser';
-    }
-  });
 
   /** Always at least one entry, so the caret has a line to sit on. */
   protected readonly logicalLines = computed(() => this.input().split('\n'));
@@ -145,16 +113,6 @@ export class Terminal implements TerminalCommandContext {
     });
 
     void this.restore();
-
-    // The machine name arrives asynchronously: UA-CH high-entropy values are a
-    // promise by spec, and may resolve after the view is gone.
-    let alive = true;
-    destroyRef.onDestroy(() => {
-      alive = false;
-    });
-    void readClientHints().then((hints) => {
-      if (alive) this.client.set(describeClient(hints));
-    });
   }
 
   /**
