@@ -4,6 +4,7 @@ import { findCommand, TerminalCommandContext } from './commands';
 import { SettingsStore } from './settings.store';
 import { LineKind, RenderLine, spliceBlock, trailingBackslashes } from './line';
 import { FICTIONAL_TERMINAL, TerminalConfig } from './terminal.config';
+import { VisibleViewport } from './visible-viewport';
 
 /**
  * A fictional terminal: no PTY, no shell, no input element doing the work.
@@ -49,6 +50,9 @@ export class Terminal implements TerminalCommandContext {
   private readonly scroller = viewChild<ElementRef<HTMLElement>>('scroller');
   private readonly capture = viewChild<ElementRef<HTMLInputElement>>('capture');
   private readonly settings = inject(SettingsStore);
+
+  /** Read only for its `height` signal, which the scroll pin depends on. */
+  private readonly viewport = inject(VisibleViewport);
   private readonly store = inject(CommandStore);
 
   /*
@@ -115,9 +119,14 @@ export class Terminal implements TerminalCommandContext {
     // that the browser clamps to the pre-update bottom, and silently leaves the
     // newest line off screen. Reading the signals here registers them as
     // dependencies, so this runs again after every edit.
+    //
+    // viewport.height() is read for the same reason: when the on-screen keyboard
+    // opens, the text has not changed but the shell has just become much
+    // shorter, and without this the caret line would stay pinned below the fold.
     afterRenderEffect(() => {
       this.scrollback();
       this.input();
+      this.viewport.height();
       const el = this.scroller()?.nativeElement;
       // Only follow the output if the user is already parked at the bottom, so
       // scrolling back through the log is not yanked away by the next line.
