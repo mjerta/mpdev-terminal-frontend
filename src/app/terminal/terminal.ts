@@ -3,8 +3,12 @@ import { CommandStore } from './command.store';
 import { findCommand, TerminalCommandContext } from './commands';
 import { SettingsStore } from './settings.store';
 import { LineKind, RenderLine, spliceBlock, trailingBackslashes } from './line';
+import { buildContinuation, buildPrompt, PromptSegment } from './prompt';
 import { FICTIONAL_TERMINAL, TerminalConfig } from './terminal.config';
 import { VisibleViewport } from './visible-viewport';
+
+/** Shared empty array: a stable reference keeps the inner loop from re-rendering. */
+const NO_SEGMENTS: readonly PromptSegment[] = [];
 
 /**
  * A fictional terminal: no PTY, no shell, no input element doing the work.
@@ -54,13 +58,6 @@ export class Terminal implements TerminalCommandContext {
   /** Read only for its `height` signal, which the scroll pin depends on. */
   private readonly viewport = inject(VisibleViewport);
   private readonly store = inject(CommandStore);
-
-  /*
-    Trailing space is part of the prompt, not markup: Angular strips whitespace
-    between inline elements, so `</span> <span>` would not survive compilation
-    and the prompt would butt straight into the text ("❯ls"). whitespace-pre-wrap
-    on the line preserves it here.
-  */
   /**
    * This visitor's name, loaded from IndexedDB. `guest` shows for the moment
    * before it resolves, because IndexedDB reads are asynchronous where a
@@ -71,23 +68,55 @@ export class Terminal implements TerminalCommandContext {
   /** A configured user pins the name; otherwise guests get a generated one. */
   protected readonly user = computed(() => this.config.user ?? this.guest() ?? 'guest');
 
-  protected readonly prompt = computed(
-    () => `${this.user()}@${this.config.host} ${this.config.cwd} ${this.config.promptSymbol} `,
+  /*
+    The prompt is a list of styled segments rather than one string, because that
+    is the shape starship actually emits: each module carries its own style. The
+    builder is in prompt.ts and records what `starship prompt` really produced on
+    this machine. Trailing spaces live inside the segment text, since the Angular
+    compiler strips whitespace between inline elements.
+  */
+  protected readonly promptSegments = computed(() =>
+    buildPrompt({
+      user: this.user(),
+      host: this.config.host,
+      cwd: this.config.cwd,
+      symbol: this.config.promptSymbol,
+      showIdentity: this.config.showUserHost,
+    }),
   );
 
-  /** PS2, shown on every continuation line. */
-  protected readonly continuationPrompt = computed(() => `${this.config.continuationSymbol} `);
+  /** PS2 for continuation lines. */
+  protected readonly continuationSegments = computed(() =>
+    buildContinuation(this.config.continuationSymbol),
+  );
 
   /**
-   * The prompt a line is drawn with. Output lines get an empty string rather than
-   * being skipped, so their text still starts at column 0 while the markup stays
-   * uniform across the loop.
+   * Segments for a committed line. Output lines get a shared empty array rather
+   * than being special-cased in the template, and every branch returns a stable
+   * reference so the inner loop does not re-render on unrelated change detection.
    */
-  protected promptFor(kind: LineKind): string {
-    if (kind === 'primary') return this.prompt();
-    if (kind === 'continuation') return this.continuationPrompt();
-    return '';
+  protected segmentsFor(kind: LineKind): readonly PromptSegment[] {
+    if (kind === 'primary') return this.promptSegments();
+    if (kind === 'continuation') return this.continuationSegments();
+    return NO_SEGMENTS;
   }
+
+  /** The line being typed: PS1 on its first line, PS2 on any that follow. */
+  protected liveSegments(isFirst: boolean): readonly PromptSegment[] {
+    return isFirst ? this.promptSegments() : this.continuationSegments();
+  }
+
+  /**
+   * Whether this line gets starship's `add_newline` gap above it: primary
+   * prompts only, since continuation and output lines belong to the block above.
+   *
+   * That includes the very first prompt of a session. Checked against the real
+   * thing rather than assumed: `starship prompt` at $HOME emits a leading
+   * newline before any prompt, so starting with one gap is the faithful
+   * behaviour, not a stray blank line.
+   */
+  protected readonly showsGapBefore = (kind: LineKind): boolean =>
+    this.config.addNewline && kind === 'primary';
 
   /** Always at least one entry, so the caret has a line to sit on. */
   protected readonly logicalLines = computed(() => this.input().split('\n'));

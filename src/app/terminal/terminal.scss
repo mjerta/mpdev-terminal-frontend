@@ -7,9 +7,35 @@
   overflow: hidden;
 }
 
+/*
+  Starship's `add_newline`: a blank line above each prompt.
+
+  Expressed as a margin on the prompt paragraph rather than an extra empty
+  element, so `main p` keeps meaning "a line with content in it". Rendering it as
+  an empty <p> silently changed what every paragraph selector returns, including
+  the one in app.spec.ts.
+
+  Only primary prompts get this. Continuation and output lines belong to the
+  block above them, and spacing those would shred the screen.
+*/
+.prompt-gap {
+  /* One full text line, derived from the tokens that size the type, so the gap
+     stays right when the config retunes font size or leading. */
+  margin-top: calc(var(--text-terminal, 0.9375rem) * var(--leading-terminal, 1.45));
+}
+
+/*
+  The caret is an inline box one character wide, sitting right after the text, so
+  the browser positions it and no cell measurement is needed. A non-breaking
+  space gives it exactly one glyph of width.
+
+  Unfocused is the default: a hollow box, like most terminals draw a background
+  cursor. Focus is answered here rather than mirrored into component state,
+  because (focus)/(blur) only updates the caret once change detection runs, and
+  `focus` is not an event that reliably schedules it in a zoneless app.
+  :focus-within is correct by construction and needs no signal.
+*/
 .caret {
-  /* The cell to the right of the text. A non-breaking space gives it the width
-     of exactly one glyph, which is also what keeps it inline-flow accurate. */
   caret-color: transparent;
   background-color: transparent;
   box-shadow: inset 0 0 0 1px currentColor;
@@ -17,20 +43,6 @@
 
 .caret::after {
   content: '\00a0';
-}
-
-/*
-  Focus state is answered here rather than mirrored into component state: a
-  (focus)/(blur) binding would only update the caret after change detection runs,
-  and `focus` is not one of the events that reliably schedules it in a zoneless
-  app. :focus-within is correct by construction and needs no signal.
-
-  Unfocused is the default: a hollow box, like most terminals draw a background
-  cursor.
-*/
-.caret {
-  background-color: transparent;
-  box-shadow: inset 0 0 0 1px currentColor;
 }
 
 :host(:focus-within) .caret {

@@ -19,6 +19,18 @@
   --color-card: color-mix(in oklab, var(--surface) 88%, var(--text-main));
   --color-muted: color-mix(in oklab, var(--surface) 78%, var(--text-main));
   --color-border: color-mix(in oklab, var(--text-main) 20%, transparent);
+
+  /*
+    Starship colours its segments by ANSI name, so the prompt asks for "cyan"
+    rather than a literal hue. Resolving that against the active palette is what
+    makes the prompt recolour with the theme selector, the same way a real
+    terminal's colours come from its scheme rather than from the program.
+
+    Only the names this prompt actually uses are mapped. Add siblings (blue,
+    green, the bright variants) when a segment needs them, since a full 16-colour
+    table across ten palettes is data no prompt here asks for yet.
+  */
+  --color-ansi-cyan: var(--primary);
 }
 
 /*

@@ -22,6 +22,17 @@ export interface TerminalConfig {
    * shell falls back to bash's `>`; we mirror that rather than invent a style.
    */
   readonly continuationSymbol: string;
+  /**
+   * starship's `add_newline`: a blank line above each prompt, which is most of
+   * what makes it read as starship rather than a plain shell.
+   */
+  readonly addNewline: boolean;
+  /**
+   * Show `user@host`. Your real config renders neither, because starship only
+   * surfaces them over ssh or for root; this prototype wants them on screen, so
+   * they are shown dim rather than as part of the starship emphasis.
+   */
+  readonly showUserHost: boolean;
   readonly font: {
     readonly family: string;
     readonly size: string;
@@ -45,6 +56,8 @@ export const FICTIONAL_TERMINAL: TerminalConfig = {
   cwd: '~',
   promptSymbol: '❯',
   continuationSymbol: '>',
+  addNewline: true,
+  showUserHost: true,
   font: {
     // Same stack as @theme in styles/terminal.scss; this one wins at runtime.
     family:
