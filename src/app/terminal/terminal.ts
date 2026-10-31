@@ -1,4 +1,5 @@
-import { Component, DestroyRef, ElementRef, afterRenderEffect, computed, effect, signal, viewChild } from '@angular/core';
+import { Component, DestroyRef, ElementRef, afterRenderEffect, computed, effect, inject, signal, viewChild } from '@angular/core';
+import { HistoryStore } from './history.store';
 import { RenderLine, trailingBackslashes } from './line';
 import { FICTIONAL_TERMINAL, TerminalConfig } from './terminal.config';
 
@@ -14,6 +15,8 @@ import { FICTIONAL_TERMINAL, TerminalConfig } from './terminal.config';
  * each line is rendered as its own paragraph: that keeps "one <p> == one line you
  * typed" true, which is what stops a soft wrap from being confused with a real
  * newline.
+ *
+ * Scrollback is persisted to IndexedDB and reloaded on startup.
  */
 @Component({
   selector: 'app-terminal',
@@ -37,6 +40,7 @@ export class Terminal {
 
   private readonly scroller = viewChild<ElementRef<HTMLElement>>('scroller');
   private readonly capture = viewChild<ElementRef<HTMLInputElement>>('capture');
+  private readonly store = inject(HistoryStore);
 
   /*
     Trailing space is part of the prompt, not markup: Angular strips whitespace
@@ -89,6 +93,19 @@ export class Terminal {
       // scrolling back through history is not yanked away by the next line.
       if (el && this.atBottom) el.scrollTop = el.scrollHeight;
     });
+
+    void this.restore();
+  }
+
+  /**
+   * Prepend whatever was persisted. Prepending rather than setting means a line
+   * committed while the read was in flight cannot be lost, whichever order the
+   * two resolve in.
+   */
+  private async restore(): Promise<void> {
+    const stored = await this.store.load();
+    if (stored.length === 0) return;
+    this.history.update((current) => [...stored.map(({ text, kind }) => ({ text, kind })), ...current]);
   }
 
   /** Track whether the user is at the bottom, which decides if we auto-follow. */
@@ -215,6 +232,9 @@ export class Terminal {
     }));
     this.history.update((history) => [...history, ...lines]);
     this.input.set('');
+
+    const at = Date.now();
+    void this.store.append(lines.map((line) => ({ ...line, at })));
   }
 
   private settleCaret(): void {

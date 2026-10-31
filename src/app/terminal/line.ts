@@ -11,6 +11,12 @@ export interface RenderLine {
   readonly kind: LineKind;
 }
 
+/** A persisted line. `seq` is filled in by IndexedDB's autoIncrement on read. */
+export interface StoredLine extends RenderLine {
+  readonly at: number;
+  readonly seq?: number;
+}
+
 /**
  * Count of backslashes at the end of a line. Bash splices a line when that count
  * is odd: `foo \` continues, but `foo \\` is an escaped backslash and submits.
