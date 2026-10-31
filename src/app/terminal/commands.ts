@@ -56,7 +56,27 @@ const history: TerminalCommand = {
   },
 };
 
-export const TERMINAL_COMMANDS: readonly TerminalCommand[] = [clear, history];
+/**
+ * Lists what can be typed. Built from TERMINAL_COMMANDS rather than a hand
+ * written list, so a command cannot be added here and forgotten there.
+ *
+ * Sorted because the registry order is authoring order, and a list that
+ * reshuffles when someone appends to the array is a nuisance.
+ */
+const help: TerminalCommand = {
+  name: 'help',
+  summary: 'list the available commands',
+  run(context) {
+    const width = Math.max(...TERMINAL_COMMANDS.map((command) => command.name.length));
+    context.printOutput(
+      [...TERMINAL_COMMANDS]
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((command) => `${command.name.padEnd(width)}  ${command.summary}`),
+    );
+  },
+};
+
+export const TERMINAL_COMMANDS: readonly TerminalCommand[] = [clear, history, help];
 
 export interface Invocation {
   readonly command: TerminalCommand;
