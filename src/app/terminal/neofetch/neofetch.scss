@@ -35,11 +35,21 @@
   margin: 0;
   /*
     48 columns at JetBrains Mono's 0.6em advance width is 28.8em of art. Dividing
-    the container by that makes the logo exactly as wide as the space available,
-    then the min() stops it growing past the terminal's own text size on a wide
-    screen. No horizontal scroll on a phone, no shrunken logo on a desktop.
+    the container by that would make the logo exactly as wide as the space
+    available, which is what an earlier version did - and on a phone it left the
+    last column flush with the terminal's right edge, close enough that a rounded
+    font metric clipped it. Dividing by 32 instead keeps roughly a tenth of the
+    width as breathing room, then the min() stops it growing past the terminal's
+    own text size on a wide screen.
   */
-  font-size: min(var(--text-terminal, 0.9375rem), calc(100cqw / 29));
+  font-size: min(var(--text-terminal, 0.9375rem), calc(100cqw / 32));
+  /*
+    iOS inflates text it thinks is too small for the screen, which would silently
+    undo the sizing above and push the art back over the edge. Opting out here
+    keeps the block letters at the size the container query chose.
+  */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
   /* 1, not the terminal's 1.45: box-drawing glyphs only join up when the rows
      sit flush, and a gap between them would break the letters apart. */
   line-height: 1;
