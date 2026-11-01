@@ -2,21 +2,25 @@
   <!-- Dropdown Trigger Button -->
   <button
     (click)="isOpen.set(!isOpen())"
-    class="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-card px-3.5 py-2 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-muted"
+    class="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-card px-3.5 py-2 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-muted w-[20rem] justify-between"
   >
-    <span class="h-2.5 w-2.5 rounded-full bg-primary"></span>
-    <span
-      >Theme: <strong class="capitalize">{{ currentThemeName() }}</strong></span
-    >
-    <svg
-      class="h-4 w-4 text-muted-foreground transition-transform duration-200"
-      [class.rotate-180]="isOpen()"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-    >
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-    </svg>
+    <div class="grow inline-flex items-center gap-2">
+      <span class="h-2.5 w-2.5 rounded-full bg-primary"></span>
+      <span
+        >Theme: <strong class="capitalize">{{ currentThemeName() }}</strong></span
+      >
+    </div>
+    <div class="grow inline-flex justify-end">
+      <svg
+        class="h-4 w-4 text-muted-foreground transition-transform duration-200"
+        [class.rotate-180]="isOpen()"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+      >
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+      </svg>
+    </div>
   </button>
 
   <!-- Dropdown Menu Panel -->

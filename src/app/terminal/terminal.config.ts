@@ -85,7 +85,7 @@ export const FICTIONAL_TERMINAL: TerminalConfig = {
   cwd: '~',
   promptSymbol: '❯',
   errorSymbol: '✗',
-  shell: 'bash',
+  shell: 'fake-bash',
   continuationSymbol: '>',
   addNewline: true,
   showUserHost: true,
