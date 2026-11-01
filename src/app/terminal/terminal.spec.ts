@@ -2,7 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 
 import { Terminal } from './terminal';
-import { TerminalBoot } from './boot';
+import { BOOT_TIMING, TerminalBoot } from './boot';
 
 describe('Terminal', () => {
   let component: Terminal;
@@ -11,6 +11,9 @@ describe('Terminal', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [Terminal],
+      // Long enough to assert against, short enough not to slow the suite.
+      // The backstop is effectively off here so reveal depends on the dwell.
+      providers: [{ provide: BOOT_TIMING, useValue: { minimumMs: 250, timeoutMs: 60_000 } }],
     }).compileComponents();
 
     fixture = TestBed.createComponent(Terminal);
@@ -194,43 +197,65 @@ describe('Terminal', () => {
     const identityVisible = (): boolean =>
       (fixture.nativeElement as HTMLElement).textContent?.includes('@mpdev') ?? false;
     const bootText = (): string => (fixture.nativeElement as HTMLElement).textContent ?? '';
+    const boot = (): TerminalBoot => TestBed.inject(TerminalBoot);
 
-    /** Sources this component can settle on its own; `theme` belongs to MainContainer. */
-    const settleTerminalSources = (): void => {
-      const boot = TestBed.inject(TerminalBoot);
-      boot.mark('identity');
-      boot.mark('history');
-      boot.mark('theme');
+    /** The boot line, while the dwell is running. */
+    const BAR = /booting \d+%/;
+
+    async function waited(ms: number): Promise<void> {
+      await new Promise((resolve) => setTimeout(resolve, ms));
       fixture.detectChanges();
-    };
+    }
 
-    it('withholds the placeholder identity rather than showing a guess', () => {
-      // Nothing has been restored yet in this fixture, so the confident-looking
-      // `guest@mpdev` must not be on screen.
-      expect(identityVisible()).toBe(false);
+    it('shows the name only once the identity source has actually answered', async () => {
+      /*
+        Asserting "absent at time X" would depend on whether jsdom's storage stub
+        resolved before this line ran, so the test states the rule instead: the
+        name is on screen if and only if that one source has settled. Then it waits
+        for the settle and checks the name really does arrive.
+      */
+      fixture.detectChanges();
+      expect(identityVisible()).toBe(boot().has('identity'));
 
-      settleTerminalSources();
+      // Bounded so a regression fails the test instead of hanging the suite.
+      for (let i = 0; i < 50 && !boot().has('identity'); i++) await waited(10);
+      expect(boot().has('identity')).toBe(true);
       expect(identityVisible()).toBe(true);
     });
 
-    it('stays quiet on a fast boot rather than flashing a loader', () => {
-      settleTerminalSources();
-      expect(bootText()).not.toContain('booting');
+    it('puts a determinate boot bar over the prompt from the first frame', () => {
+      // showLoader is true before the dwell elapses, with no timing to win.
+      fixture.detectChanges();
+      expect(boot().showLoader()).toBe(true);
+      expect(bootText()).toMatch(BAR);
     });
 
-    it('shows real progress while storage is genuinely slow', async () => {
-      // `theme` is never marked in a Terminal-only fixture, so this stands in for
-      // a visit where a source is still outstanding past the grace period.
-      await new Promise((resolve) => setTimeout(resolve, 250));
-      fixture.detectChanges();
-      expect(bootText()).toMatch(/booting \d+% [█░]+/);
+    it('lifts the bar once the dwell passes and every source has settled', async () => {
+      boot().mark('identity');
+      boot().mark('history');
+      boot().mark('theme');
+
+      // Still up: readiness alone is not enough, which is the whole point of the dwell.
+      expect(boot().showLoader()).toBe(true);
+
+      await waited(400);
+      expect(boot().showLoader()).toBe(false);
+      expect(bootText()).not.toMatch(BAR);
+    });
+
+    it('keeps the bar up when a source never answers, until the backstop', async () => {
+      // `theme` belongs to MainContainer and is never marked in this fixture.
+      boot().mark('identity');
+      boot().mark('history');
+      await waited(400);
+      expect(boot().ready()).toBe(false);
+      expect(bootText()).toMatch(BAR);
     });
 
     it('lets typed input take over from the hint', async () => {
-      await new Promise((resolve) => setTimeout(resolve, 250));
+      expect(bootText()).toMatch(BAR);
       type('ls');
-      expect(bootText()).not.toContain('booting');
-      expect(committedPrompts().length).toBeGreaterThanOrEqual(0);
+      expect(bootText()).not.toMatch(BAR);
     });
   });
 });

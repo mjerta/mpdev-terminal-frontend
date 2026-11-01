@@ -121,12 +121,14 @@ export class Terminal implements TerminalCommandContext {
       symbol: this.config.promptSymbol,
       errorSymbol: this.config.errorSymbol,
       /*
-        Withheld until boot finishes. The placeholder name would otherwise read as
-        a settled answer: `guest@mpdev` is indistinguishable from a real guest
-        that happens to be called "guest", so showing it for a frame is worse than
-        showing nothing and letting the true identity arrive.
+        Withheld until the identity source has answered. The placeholder name would
+        otherwise read as a settled answer: `guest@mpdev` is indistinguishable from
+        a real guest that happens to be called "guest".
+
+        Keyed on this one source rather than overall readiness, so a slow or missing
+        unrelated source (a theme, a history) cannot hide the visitor's name forever.
       */
-      showIdentity: this.config.showUserHost && this.boot.ready(),
+      showIdentity: this.config.showUserHost && this.boot.has('identity'),
     };
     return {
       ok: buildPrompt({ ...shared, failed: false }),

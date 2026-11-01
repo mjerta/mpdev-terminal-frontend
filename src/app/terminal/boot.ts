@@ -1,9 +1,9 @@
-import { Injectable, computed, signal } from '@angular/core';
+import { Injectable, InjectionToken, computed, inject, signal } from '@angular/core';
 
 /**
- * The asynchronous sources the first real frame depends on. Each must be marked
+ * The asynchronous sources the first frame depends on. Each must be marked
  * exactly once, including when there was nothing to load: a source that never
- * runs still has to settle, or the loader never lifts.
+ * runs still has to settle, or the boot screen has to wait for it.
  *
  * - `identity`: the guest name from IndexedDB (immediate when config pins a user)
  * - `history`: the persisted command list
@@ -13,62 +13,82 @@ export type BootSource = 'identity' | 'history' | 'theme';
 
 const SOURCES: readonly BootSource[] = ['identity', 'history', 'theme'];
 
-/**
- * How long to stay silent before admitting the boot is actually slow.
- *
- * IndexedDB normally answers within a few milliseconds, so a loader shown
- * immediately would flash for one frame on every visit. Delaying the reveal keeps
- * the fast path invisible and still surfaces a real indicator when storage is
- * genuinely slow or blocked.
- */
-const LOADER_DELAY_MS = 150;
+/** Boot screen timing. Overridable so tests do not have to wait a second. */
+export interface BootTiming {
+  /** How long the boot screen stays up even if everything settled instantly. */
+  readonly minimumMs: number;
+  /** Backstop: lift regardless, so a forgotten source cannot brick the screen. */
+  readonly timeoutMs: number;
+}
+
+export const BOOT_TIMING = new InjectionToken<BootTiming>('terminal.bootTiming', {
+  providedIn: 'root',
+  factory: () => ({ minimumMs: 1000, timeoutMs: 3000 }),
+});
+
+/** How often the displayed percentage is refreshed while the boot screen is up. */
+const TICK_MS = 40;
 
 /**
- * Tracks when the app's stored state has arrived, so the terminal can say "still
- * fetching" instead of rendering a confident placeholder.
+ * Drives the boot sequence: the percentage, and when to reveal.
  *
- * The problem this exists for: the guest name comes from IndexedDB, so the first
- * frame would otherwise show `guest@mpdev` before resolving to
- * `guest-x32a@mpdev`. That placeholder is not neutral, it reads as a finished
- * answer, and the identity segment is withheld until then.
+ * Two phases, each doing something honest.
+ *
+ * *Booting* shows a percentage of the known dwell window. There is a real fixed
+ * duration to measure against, so the number climbs smoothly; counting the three
+ * settled sources instead would read 0, jump, done. It is capped at 99 because
+ * reaching a hundred is reserved for work that is genuinely finished.
+ *
+ * *Revealing* requires every source answered and the dwell elapsed, with a timeout
+ * so a source that is never marked costs one boot screen rather than the app.
+ *
+ * Stored settings are held back until the reveal and applied then, so the palette
+ * the visitor actually picked is the first one they see on the terminal rather
+ * than a default that snaps to it a frame later. The colours themselves ease in
+ * via the registered-token transition in `themes.scss`; this service only decides
+ * *when* the value is allowed to change.
  */
 @Injectable({ providedIn: 'root' })
 export class TerminalBoot {
   private readonly settled = signal<ReadonlySet<BootSource>>(new Set());
-  private readonly slow = signal(false);
+  private readonly held = signal(false);
+  private readonly gaveUp = signal(false);
+  private readonly percent = signal(0);
+  private readonly startedAt = Date.now();
 
-  /** Percentage of sources that have answered, 0..100. */
-  readonly progress = computed(() => (this.settled().size / SOURCES.length) * 100);
+  private readonly timing = inject(BOOT_TIMING);
 
   readonly ready = computed(() => this.settled().size === SOURCES.length);
 
-  /** True only while a *noticeably* slow boot is still outstanding. */
-  readonly showLoader = computed(() => this.slow() && !this.ready());
+  /** Revealed once the dwell is over *and* every source settled, or on timeout. */
+  readonly revealed = computed(() => this.gaveUp() || (this.ready() && this.held()));
 
-  /**
-   * e.g. `booting 67% ████████░░░░`. Real completed-source count, never a
-   * decorative spin.
-   *
-   * Coarse by construction: every source awaits the same one connection promise,
-   * so in practice this tends to read `0%` and then complete rather than climbing
-   * smoothly. That is the honest version of the number; interpolating between the
-   * two would be theatre dressed as progress.
-   */
-  readonly hint = computed(() => {
-    const percent = Math.round(this.progress());
-    const cells = 12;
-    const filled = Math.round((percent / 100) * cells);
-    return `booting ${percent}% ${'█'.repeat(filled)}${'░'.repeat(cells - filled)}`;
-  });
+  /** True while the boot screen should be on top. */
+  readonly showLoader = computed(() => !this.revealed());
+
+  /** e.g. `booting 42%` - fraction of the boot window elapsed, held under 100. */
+  readonly hint = computed(() => `booting ${this.percent()}%`);
 
   constructor() {
     /*
-      One-shot, deliberately. `showLoader` also requires `!ready()`, and readiness
-      is monotonic, so a timer that fires after a fast boot sets a flag that is
-      never displayed. That is simpler than arming and disarming on every change,
-      and it keeps the service free of scheduling side effects.
+      The dwell and backstop timers are one-shot and never cleared: `revealed` is
+      monotonic, so a timer landing after the fact sets a flag that changes nothing.
     */
-    setTimeout(() => this.slow.set(true), LOADER_DELAY_MS);
+    setTimeout(() => this.held.set(true), this.timing.minimumMs);
+    setTimeout(() => this.gaveUp.set(true), this.timing.timeoutMs);
+
+    const tick = setInterval(() => {
+      const elapsed = Date.now() - this.startedAt;
+      const reached = Math.min(99, Math.round((elapsed / this.timing.minimumMs) * 100));
+      // Monotonic: a stalled source must never make the number run backwards.
+      if (reached > this.percent()) this.percent.set(reached);
+      if (this.revealed()) clearInterval(tick);
+    }, TICK_MS);
+  }
+
+  /** Whether one specific source has answered, independent of the others. */
+  has(source: BootSource): boolean {
+    return this.settled().has(source);
   }
 
   mark(source: BootSource): void {
