@@ -1,0 +1,126 @@
+/*
+  A query container so the logo can be sized against the space it actually has.
+  Without this the art would have to pick a font size up front, and the only safe
+  choice would be small enough for a phone - which wastes half the width on a
+  desktop. With it, the same markup fits both.
+*/
+:host {
+  display: block;
+  container-type: inline-size;
+}
+
+.neofetch {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.25rem;
+  margin: 0;
+  padding: 0;
+}
+
+/*
+  Two columns only when both genuinely fit. Below this the report sits under the
+  logo, which is what keeps a phone from scrolling sideways: the breakpoint is
+  measured against the container, not the viewport, so it stays correct inside the
+  terminal's padding.
+*/
+@container (min-width: 46rem) {
+  .neofetch {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+    gap: 2.5rem;
+  }
+}
+
+.logo {
+  margin: 0;
+  /*
+    48 columns at JetBrains Mono's 0.6em advance width is 28.8em of art. Dividing
+    the container by that makes the logo exactly as wide as the space available,
+    then the min() stops it growing past the terminal's own text size on a wide
+    screen. No horizontal scroll on a phone, no shrunken logo on a desktop.
+  */
+  font-size: min(var(--text-terminal, 0.9375rem), calc(100cqw / 29));
+  /* 1, not the terminal's 1.45: box-drawing glyphs only join up when the rows
+     sit flush, and a gap between them would break the letters apart. */
+  line-height: 1;
+  white-space: pre;
+  user-select: none;
+  /*
+    The palette gradient. It reads as one logo rather than two flat colours, and
+    because both stops are theme tokens it recolours with the theme like the rest
+    of the screen.
+  */
+  background-image: linear-gradient(140deg, var(--primary), var(--accent));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* If text clipping is unavailable, keep the logo readable in one flat colour
+   rather than leaving transparent text on nothing. */
+@supports not ((-webkit-background-clip: text) or (background-clip: text)) {
+  .logo {
+    background-image: none;
+    color: var(--primary);
+  }
+}
+
+.report {
+  min-width: 0;
+}
+
+.identity {
+  margin: 0;
+  color: var(--primary);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.at {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+/*
+  A real rule rather than a string of dashes: it has to stay one line whatever
+  the font metrics are, and it should not be selectable as text.
+*/
+.rule {
+  width: 14ch;
+  margin: 0.35em 0 0.6em;
+  border: 0;
+  border-top: 1px solid var(--text-muted);
+  opacity: 0.6;
+}
+
+.details {
+  display: grid;
+  /* max-content, so the colon column is as wide as the longest label and every
+     value starts on the same line, which is most of what makes this read as a
+     report rather than a list. */
+  grid-template-columns: max-content minmax(0, 1fr);
+  column-gap: 1.5ch;
+  row-gap: 0.1em;
+  margin: 0;
+}
+
+/* Let dt/dd join the parent grid instead of nesting another one. */
+.row {
+  display: contents;
+}
+
+dt {
+  color: var(--primary);
+}
+
+dt::after {
+  content: ':';
+  color: var(--text-muted);
+}
+
+dd {
+  margin: 0;
+  color: var(--text-main);
+  /* A long value wraps inside its column rather than widening the block. */
+  overflow-wrap: anywhere;
+}

@@ -2,7 +2,7 @@ import { commandNotFound, EXIT_NOT_FOUND, resolveCommand, TERMINAL_COMMANDS } fr
 
 describe('resolveCommand', () => {
   it('finds every registered command by exact first token', () => {
-    for (const name of ['clear', 'help', 'history']) {
+    for (const { name } of TERMINAL_COMMANDS) {
       expect(resolveCommand(name).found).toBe(true);
     }
   });
@@ -46,6 +46,32 @@ describe('commandNotFound', () => {
   });
 });
 
+describe('neofetch', () => {
+  it('asks the terminal for the block rather than printing lines', () => {
+    let blocks = 0;
+    let printed = 0;
+    const context = {
+      clearScreen: () => {},
+      commandList: () => [],
+      printOutput: () => {
+        printed++;
+      },
+      showNeofetch: () => {
+        blocks++;
+      },
+    };
+
+    const neofetch = TERMINAL_COMMANDS.find((command) => command.name === 'neofetch');
+    expect(neofetch).toBeTruthy();
+    neofetch?.run(context, []);
+
+    expect(blocks).toBe(1);
+    // Text output would mean the component never gets a chance to lay out the
+    // logo and the report, which is the whole reason this command exists.
+    expect(printed).toBe(0);
+  });
+});
+
 describe('help', () => {
   it('lists every registered command, including itself', () => {
     const printed: string[][] = [];
@@ -53,6 +79,7 @@ describe('help', () => {
       clearScreen: () => {},
       commandList: () => [],
       printOutput: (lines: readonly string[]) => printed.push([...lines]),
+      showNeofetch: () => {},
     };
 
     const help = TERMINAL_COMMANDS.find((command) => command.name === 'help');
@@ -71,6 +98,7 @@ describe('help', () => {
       clearScreen: () => {},
       commandList: () => [],
       printOutput: (lines: readonly string[]) => printed.push([...lines]),
+      showNeofetch: () => {},
     };
     TERMINAL_COMMANDS.find((command) => command.name === 'help')?.run(context, []);
 

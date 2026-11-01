@@ -1,0 +1,24 @@
+<figure class="neofetch">
+  <!-- Decorative: the report below already names the host, so reading the block
+       letters aloud would only spell "mpdev" a second time. -->
+  <pre class="logo" aria-hidden="true">{{ art }}</pre>
+
+  <figcaption class="report">
+    <p class="identity">
+      <span>{{ who }}</span>
+      <span class="at">@</span>
+      <span>{{ config.host }}</span>
+    </p>
+
+    <hr class="rule" />
+
+    <dl class="details">
+      @for (detail of details; track detail.label) {
+        <div class="row">
+          <dt>{{ detail.label }}</dt>
+          <dd>{{ detail.value }}</dd>
+        </div>
+      }
+    </dl>
+  </figcaption>
+</figure>

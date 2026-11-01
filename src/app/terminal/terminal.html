@@ -6,12 +6,23 @@
     (scroll)="onScroll($event)"
   >
     @for (line of scrollback(); track $index) {
-      <p class="break-all whitespace-pre-wrap" [class.prompt-gap]="showsGapBefore(line.kind)">
-        @for (seg of segmentsFor(line); track $index) {
-          <span [class]="seg.classes">{{ seg.text }}</span>
-        }
-        <span>{{ line.text }}</span>
-      </p>
+      @if (line.kind === 'neofetch') {
+        <!-- A block, not a line: see neofetch/. The prompt line above it is the
+             ordinary echoed `❯ neofetch`, so the block needs no prompt of its own. -->
+        <app-neofetch
+          [user]="user()"
+          [theme]="theme()"
+          [uptimeMs]="line.uptimeMs ?? 0"
+          [commands]="commandCount()"
+        />
+      } @else {
+        <p class="break-all whitespace-pre-wrap" [class.prompt-gap]="showsGapBefore(line.kind)">
+          @for (seg of segmentsFor(line); track $index) {
+            <span [class]="seg.classes">{{ seg.text }}</span>
+          }
+          <span>{{ line.text }}</span>
+        </p>
+      }
     }
 
     <!--

@@ -15,6 +15,15 @@ export interface TerminalCommandContext {
   commandList(): readonly string[];
   /** Append machine output to the scrollback: lines with no prompt. */
   printOutput(lines: readonly string[]): void;
+  /**
+   * Append the `neofetch` block.
+   *
+   * Separate from `printOutput` because this one is not text: it is a logo plus a
+   * two-column report, which the terminal hands to a component. Commands stay
+   * Angular-free either way - the context is the seam, and what it draws behind it
+   * is not this file's business.
+   */
+  showNeofetch(): void;
 }
 
 export interface TerminalCommand {
@@ -76,7 +85,20 @@ const help: TerminalCommand = {
   },
 };
 
-export const TERMINAL_COMMANDS: readonly TerminalCommand[] = [clear, history, help];
+/**
+ * The system report. Unlike the others this prints nothing itself: the output is a
+ * logo and a two-column report, so it asks the terminal to place a block rather
+ * than handing it lines. The data lives in the config map; see neofetch/.
+ */
+const neofetch: TerminalCommand = {
+  name: 'neofetch',
+  summary: 'show system information with the mpdev logo',
+  run(context) {
+    context.showNeofetch();
+  },
+};
+
+export const TERMINAL_COMMANDS: readonly TerminalCommand[] = [clear, history, help, neofetch];
 
 /** bash's conventional exit code for a command it could not find. */
 export const EXIT_NOT_FOUND = 127;

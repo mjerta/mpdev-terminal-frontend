@@ -6,6 +6,7 @@ import {
   computed,
   effect,
   inject,
+  input,
   signal,
   viewChild,
 } from '@angular/core';
@@ -19,6 +20,7 @@ import {
 } from './commands';
 import { SettingsStore } from './settings.store';
 import { LineKind, RenderLine, spliceBlock, trailingBackslashes } from './line';
+import { Neofetch } from './neofetch/neofetch';
 import { buildContinuation, buildPrompt, PromptSegment } from './prompt';
 import { FICTIONAL_TERMINAL, TerminalConfig } from './terminal.config';
 import { VisibleViewport } from './visible-viewport';
@@ -49,14 +51,26 @@ const NO_SEGMENTS: readonly PromptSegment[] = [];
   selector: 'app-terminal',
   templateUrl: './terminal.html',
   styleUrl: './terminal.scss',
+  imports: [Neofetch],
 })
 export class Terminal implements TerminalCommandContext {
   protected readonly config: TerminalConfig = FICTIONAL_TERMINAL;
+
+  /**
+   * The active palette id, only used by the `neofetch` report.
+   *
+   * The prompt itself never needs this: it asks for ANSI colour names and lets the
+   * stylesheet resolve them against the theme. A report has to print the name as
+   * text, though, so the id is passed down from the container that owns it.
+   */
+  readonly theme = input('tokyo-night');
 
   /** Lines on screen, oldest first. Empty entries are kept: a shell still shows a prompt. */
   protected readonly scrollback = signal<readonly RenderLine[]>([]);
   /** The persisted command history, oldest first. */
   private readonly commands = signal<readonly string[]>([]);
+  /** How many commands have been remembered. `neofetch` reports it. */
+  protected readonly commandCount = computed(() => this.commands().length);
   /** What is currently typed after the prompt; may span several lines. */
   protected readonly input = signal('');
 
@@ -461,6 +475,22 @@ export class Terminal implements TerminalCommandContext {
     if (lines.length === 0) return;
     const output = lines.map((text) => ({ text, kind: 'output' as const }));
     this.scrollback.update((scrollback) => [...scrollback, ...output]);
+  }
+
+  /**
+   * The `neofetch` block. Public because TerminalCommandContext requires it.
+   *
+   * Uptime is stamped here, when the command runs, rather than read by the
+   * component at paint time: a report is a snapshot, and scrolling back to it later
+   * must not quietly restate how long the session has been open since.
+   */
+  showNeofetch(): void {
+    const block: RenderLine = {
+      text: '',
+      kind: 'neofetch',
+      uptimeMs: this.boot.uptimeMs(),
+    };
+    this.scrollback.update((scrollback) => [...scrollback, block]);
   }
 
   private settleCaret(): void {

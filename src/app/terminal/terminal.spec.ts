@@ -193,6 +193,49 @@ describe('Terminal', () => {
     });
   });
 
+  describe('neofetch', () => {
+    const block = (): HTMLElement | null =>
+      (fixture.nativeElement as HTMLElement).querySelector('app-neofetch');
+
+    /** The report row for a label, read the way the template lays it out. */
+    const reportValue = (label: string): string | undefined =>
+      Array.from(block()?.querySelectorAll('.row') ?? [])
+        .find((row) => row.querySelector('dt')?.textContent?.trim() === label)
+        ?.querySelector('dd')
+        ?.textContent?.trim();
+
+    it('places the block directly under the echoed command', () => {
+      run('neofetch');
+
+      const echoed = paragraphs().find((p) => p.textContent?.includes('neofetch'));
+      expect(echoed).toBeTruthy();
+      // A block, not text: the next thing after the echoed line is the component,
+      // not an output paragraph.
+      expect(echoed?.nextElementSibling?.tagName).toBe('APP-NEOFETCH');
+      expect(block()).toBeTruthy();
+    });
+
+    it('counts itself in the command total', () => {
+      run('help');
+      run('neofetch');
+      // `history` records before running, so by the time the report is drawn the
+      // command that asked for it is already in the list.
+      expect(reportValue('Commands')).toBe('2');
+    });
+
+    it('is erased by clear, like any other screen output', () => {
+      run('neofetch');
+      expect(block()).toBeTruthy();
+
+      run('clear');
+      expect(block()).toBeNull();
+      // The history is separate and survives, which is the same rule `clear`
+      // follows for printed lines.
+      run('history');
+      expect(outputs()).toContain('1  neofetch');
+    });
+  });
+
   describe('boot', () => {
     const identityVisible = (): boolean =>
       (fixture.nativeElement as HTMLElement).textContent?.includes('@mpdev') ?? false;
