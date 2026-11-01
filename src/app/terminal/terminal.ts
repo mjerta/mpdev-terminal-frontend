@@ -8,6 +8,7 @@ import {
   inject,
   input,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { CommandStore } from './command.store';
@@ -80,6 +81,9 @@ export class Terminal implements TerminalCommandContext {
 
   /** Whether the view is parked at the bottom, which decides if we auto-follow. */
   private atBottom = true;
+
+  /** One-shot guard: the startup `neofetch` is printed at most once per session. */
+  private motdShown = false;
 
   private readonly scroller = viewChild<ElementRef<HTMLElement>>('scroller');
   private readonly capture = viewChild<ElementRef<HTMLInputElement>>('capture');
@@ -241,6 +245,25 @@ export class Terminal implements TerminalCommandContext {
     });
 
     void this.restore();
+
+    /*
+      The MOTD: one `neofetch` block, printed the moment the boot screen lifts.
+
+      The scrollback length is read through `untracked` on purpose. This effect has
+      to fire on the reveal, not on every later scrollback edit; tracking the length
+      would re-run it each time a command printed something, leaving the one-shot
+      flag as the only thing between the visitor and a second copy.
+
+      Skipped when the scrollback is not empty: a command committed during the dwell
+      is already on screen, and a report pushed under it would read as that command's
+      output rather than as the greeting it is.
+    */
+    effect(() => {
+      if (!this.boot.revealed() || this.motdShown) return;
+      if (untracked(() => this.scrollback().length) > 0) return;
+      this.motdShown = true;
+      this.showNeofetch();
+    });
 
     // Both reads can land after the view is gone, so guard the writes.
     let alive = true;

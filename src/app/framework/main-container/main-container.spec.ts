@@ -79,6 +79,28 @@ describe('MainContainer', () => {
     expect(themeAttr()).toBe('dracula');
   });
 
+  it('prints the greeting under the stored theme, not the default', async () => {
+    /*
+      The greeting and the palette are applied by two different effects on the same
+      reveal, so their order is the thing that can quietly break: a report printed
+      a frame early would name `tokyo-night` under a page already wearing dracula.
+      A report is a snapshot, so it would then keep saying the wrong thing.
+    */
+    await render(new FakeSettings({ theme: 'dracula' }));
+    await waited(350);
+
+    const rows = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll('app-neofetch .row'),
+    );
+    const reported = rows
+      .find((row) => row.querySelector('dt')?.textContent?.trim() === 'Theme')
+      ?.querySelector('dd')
+      ?.textContent?.trim();
+
+    expect(themeAttr()).toBe('dracula');
+    expect(reported).toBe('dracula');
+  });
+
   it('ignores a stored theme that no longer exists', async () => {
     await render(new FakeSettings({ theme: 'a-theme-we-removed' }));
     await waited(350);
