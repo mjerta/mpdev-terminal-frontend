@@ -24,9 +24,13 @@ export interface TerminalConfig {
    */
   readonly errorSymbol: string;
   /**
-   * Name the shell reports itself as when a command is not found, matching
-   * `bash: foo: command not found`. Your `$SHELL` is bash, so this mirrors the
-   * machine the fiction is standing in for.
+   * Name the shell reports itself as when a command is not found, i.e. the prefix
+   * of `fake-bash: foo: command not found`, and what `neofetch` prints as Shell.
+   *
+   * Says what it is rather than borrowing the real `$SHELL`: this runs no
+   * executable, so calling itself `bash` would be the one place the prototype
+   * claims a thing it does not do. The wording and the exit code it produces are
+   * still bash's, which is what the rest of this file mirrors.
    */
   readonly shell: string;
   /**

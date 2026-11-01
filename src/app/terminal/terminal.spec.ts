@@ -3,6 +3,7 @@ import { By } from '@angular/platform-browser';
 
 import { Terminal } from './terminal';
 import { BOOT_TIMING, TerminalBoot } from './boot';
+import { FICTIONAL_TERMINAL } from './terminal.config';
 
 describe('Terminal', () => {
   let component: Terminal;
@@ -147,22 +148,31 @@ describe('Terminal', () => {
   });
 
   describe('unknown commands', () => {
-    it('replies the way bash words it', () => {
+    /*
+      The prefix comes from the config rather than being written out, because the
+      name the shell reports itself as is a decision, not a fact: it is currently
+      `fake-bash`, and pinning the string here would make renaming it mean editing
+      tests. What these assert is the shape of the reply, which is what bash's
+      behaviour actually constrains.
+    */
+    const notFound = (name: string): string =>
+      `${FICTIONAL_TERMINAL.shell}: ${name}: command not found`;
+
+    it('replies with the shell prefix and the conventional wording', () => {
       run('frobnicate');
-      expect(outputs()).toContain('bash: frobnicate: command not found');
+      expect(outputs()).toContain(notFound('frobnicate'));
     });
 
     it('names only the command word, not the whole line', () => {
       run('git commit -m "message"');
-      expect(outputs()).toContain('bash: git: command not found');
+      expect(outputs()).toContain(notFound('git'));
     });
 
     it('treats a near-miss as unknown rather than prefix matching', () => {
       run('clearx');
-      expect(outputs()).toContain('bash: clearx: command not found');
+      expect(outputs()).toContain(notFound('clearx'));
     });
   });
-
   describe('an empty line', () => {
     it('prints no reply and leaves the status alone, like bash', () => {
       run('nope');
