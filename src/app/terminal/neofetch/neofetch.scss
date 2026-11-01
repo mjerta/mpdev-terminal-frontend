@@ -34,19 +34,24 @@
 .logo {
   margin: 0;
   /*
-    48 columns at JetBrains Mono's 0.6em advance width is 28.8em of art. Dividing
-    the container by that would make the logo exactly as wide as the space
-    available, which is what an earlier version did - and on a phone it left the
-    last column flush with the terminal's right edge, close enough that a rounded
-    font metric clipped it. Dividing by 32 instead keeps roughly a tenth of the
-    width as breathing room, then the min() stops it growing past the terminal's
-    own text size on a wide screen.
+    48 columns at 0.6em is 28.8em of art, so the divisor below is what decides
+    how much of the terminal it fills.
+
+    Sized against the viewport rather than the container on purpose. A browser
+    without container-query support does not fall back to the previous rule - it
+    throws away the whole declaration, leaving the art at the terminal's own text
+    size, which is 432px and overflows every phone. `vw` is universally
+    supported, so there is only one sizing path and it works everywhere.
+
+    Dividing by 42 leaves the logo at about three quarters of the terminal's
+    width on a phone: a deliberate margin, not a near miss. The min() still caps
+    it at the terminal's text size, so tablets and desktops keep the full 432px.
   */
-  font-size: min(var(--text-terminal, 0.9375rem), calc(100cqw / 32));
+  font-size: min(var(--text-terminal, 0.9375rem), calc(100vw / 42));
   /*
     iOS inflates text it thinks is too small for the screen, which would silently
     undo the sizing above and push the art back over the edge. Opting out here
-    keeps the block letters at the size the container query chose.
+    keeps the block letters at the size chosen above.
   */
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
