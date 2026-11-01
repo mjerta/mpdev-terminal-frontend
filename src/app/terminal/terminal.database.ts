@@ -45,7 +45,18 @@ export class TerminalDatabase {
         }
       };
       request.onsuccess = () => resolve(request.result);
-      request.onblocked = () => console.warn('[terminal] IndexedDB upgrade blocked by another tab');
+      /*
+        Resolve rather than wait. A blocked upgrade means another tab still holds
+        an older version open, and `onsuccess` may never fire at all. Dropping
+        persistence for one session is survivable; a boot that never completes
+        leaves the terminal stuck announcing itself as still loading.
+      */
+      request.onblocked = () => {
+        console.warn(
+          '[terminal] IndexedDB upgrade blocked by another tab, continuing without persistence',
+        );
+        resolve(null);
+      };
       request.onerror = () => {
         console.warn('[terminal] IndexedDB unavailable, nothing will persist', request.error);
         resolve(null);

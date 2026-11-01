@@ -10,6 +10,15 @@ export type LineKind = 'primary' | 'continuation' | 'output';
 export interface RenderLine {
   readonly text: string;
   readonly kind: LineKind;
+  /**
+   * For a primary prompt: whether the previous command had failed at the moment
+   * this line was echoed, which decides `❯` vs `✗`.
+   *
+   * Stored per line rather than read from live state, because a prompt already on
+   * screen cannot change retroactively. Captured on the primary line only;
+   * continuation and output lines never render a success symbol.
+   */
+  readonly failed?: boolean;
 }
 
 /**

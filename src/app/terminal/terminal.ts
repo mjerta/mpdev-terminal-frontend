@@ -1,10 +1,30 @@
-import { Component, DestroyRef, ElementRef, afterRenderEffect, computed, effect, inject, signal, viewChild } from '@angular/core';
+import {
+  Component,
+  DestroyRef,
+  ElementRef,
+  afterRenderEffect,
+  computed,
+  effect,
+  inject,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { CommandStore } from './command.store';
-import { findCommand, TerminalCommandContext } from './commands';
+import { TerminalBoot } from './boot';
+import {
+  commandNotFound,
+  EXIT_NOT_FOUND,
+  resolveCommand,
+  TerminalCommandContext,
+} from './commands';
 import { SettingsStore } from './settings.store';
 import { LineKind, RenderLine, spliceBlock, trailingBackslashes } from './line';
+import { buildContinuation, buildPrompt, PromptSegment } from './prompt';
 import { FICTIONAL_TERMINAL, TerminalConfig } from './terminal.config';
 import { VisibleViewport } from './visible-viewport';
+
+/** Shared empty array: a stable reference keeps the inner loop from re-rendering. */
+const NO_SEGMENTS: readonly PromptSegment[] = [];
 
 /**
  * A fictional terminal: no PTY, no shell, no input element doing the work.
@@ -50,17 +70,11 @@ export class Terminal implements TerminalCommandContext {
   private readonly scroller = viewChild<ElementRef<HTMLElement>>('scroller');
   private readonly capture = viewChild<ElementRef<HTMLInputElement>>('capture');
   private readonly settings = inject(SettingsStore);
+  private readonly boot = inject(TerminalBoot);
 
   /** Read only for its `height` signal, which the scroll pin depends on. */
   private readonly viewport = inject(VisibleViewport);
   private readonly store = inject(CommandStore);
-
-  /*
-    Trailing space is part of the prompt, not markup: Angular strips whitespace
-    between inline elements, so `</span> <span>` would not survive compilation
-    and the prompt would butt straight into the text ("❯ls"). whitespace-pre-wrap
-    on the line preserves it here.
-  */
   /**
    * This visitor's name, loaded from IndexedDB. `guest` shows for the moment
    * before it resolves, because IndexedDB reads are asynchronous where a
@@ -71,26 +85,105 @@ export class Terminal implements TerminalCommandContext {
   /** A configured user pins the name; otherwise guests get a generated one. */
   protected readonly user = computed(() => this.config.user ?? this.guest() ?? 'guest');
 
-  protected readonly prompt = computed(
-    () => `${this.user()}@${this.config.host} ${this.config.cwd} ${this.config.promptSymbol} `,
-  );
+  /*
+    The prompt is a list of styled segments rather than one string, because that
+    is the shape starship actually emits: each module carries its own style. The
+    builder is in prompt.ts and records what `starship prompt` really produced on
+    this machine. Trailing spaces live inside the segment text, since the Angular
+    compiler strips whitespace between inline elements.
+  */
+  /**
+   * Exit status of the last command, null until one has run. starship's whole
+   * success/error symbol mechanism rests on this, so it is kept explicitly
+   * rather than as a boolean: a real `$?` is a number.
+   */
+  private readonly lastStatus = signal<number | null>(null);
 
-  /** PS2, shown on every continuation line. */
-  protected readonly continuationPrompt = computed(() => `${this.config.continuationSymbol} `);
+  /** Null means "nothing has run yet", which is not a failure. */
+  private readonly failed = computed(() => {
+    const status = this.lastStatus();
+    return status !== null && status !== 0;
+  });
 
   /**
-   * The prompt a line is drawn with. Output lines get an empty string rather than
-   * being skipped, so their text still starts at column 0 while the markup stays
-   * uniform across the loop.
+   * Both prompt variants, built once and cached.
+   *
+   * Two arrays rather than one, so each committed line keeps the glyph it was
+   * echoed with while the live line follows the current status. A single
+   * status-driven array is the bug this avoids: every prompt in the scrollback
+   * would flip to `✗` the first time a command failed.
    */
-  protected promptFor(kind: LineKind): string {
-    if (kind === 'primary') return this.prompt();
-    if (kind === 'continuation') return this.continuationPrompt();
-    return '';
+  private readonly promptVariants = computed(() => {
+    const shared = {
+      user: this.user(),
+      host: this.config.host,
+      cwd: this.config.cwd,
+      symbol: this.config.promptSymbol,
+      errorSymbol: this.config.errorSymbol,
+      /*
+        Withheld until the identity source has answered. The placeholder name would
+        otherwise read as a settled answer: `guest@mpdev` is indistinguishable from
+        a real guest that happens to be called "guest".
+
+        Keyed on this one source rather than overall readiness, so a slow or missing
+        unrelated source (a theme, a history) cannot hide the visitor's name forever.
+      */
+      showIdentity: this.config.showUserHost && this.boot.has('identity'),
+    };
+    return {
+      ok: buildPrompt({ ...shared, failed: false }),
+      failed: buildPrompt({ ...shared, failed: true }),
+    };
+  });
+
+  /** PS2 for continuation lines. */
+  protected readonly continuationSegments = computed(() =>
+    buildContinuation(this.config.continuationSymbol),
+  );
+
+  /**
+   * Segments for a committed line. Takes the whole line, not just its kind,
+   * because the glyph depends on the status recorded when it was echoed. Output
+   * lines get a shared empty array, and every branch returns a stable reference
+   * so the inner loop does not re-render on unrelated change detection.
+   */
+  protected segmentsFor(line: RenderLine): readonly PromptSegment[] {
+    if (line.kind === 'primary')
+      return line.failed ? this.promptVariants().failed : this.promptVariants().ok;
+    if (line.kind === 'continuation') return this.continuationSegments();
+    return NO_SEGMENTS;
   }
+
+  /** The line being typed: PS1 on its first line, PS2 on any that follow. */
+  protected liveSegments(isFirst: boolean): readonly PromptSegment[] {
+    if (!isFirst) return this.continuationSegments();
+    return this.failed() ? this.promptVariants().failed : this.promptVariants().ok;
+  }
+
+  /**
+   * Whether this line gets starship's `add_newline` gap above it: primary
+   * prompts only, since continuation and output lines belong to the block above.
+   *
+   * That includes the very first prompt of a session. Checked against the real
+   * thing rather than assumed: `starship prompt` at $HOME emits a leading
+   * newline before any prompt, so starting with one gap is the faithful
+   * behaviour, not a stray blank line.
+   */
+  protected readonly showsGapBefore = (kind: LineKind): boolean =>
+    this.config.addNewline && kind === 'primary';
 
   /** Always at least one entry, so the caret has a line to sit on. */
   protected readonly logicalLines = computed(() => this.input().split('\n'));
+
+  /**
+   * What to show in place of typed text while stored state is still arriving.
+   *
+   * Empty once anything has been typed, so a slow boot can never overwrite or sit
+   * under what the visitor is actually entering.
+   */
+  protected readonly bootHint = computed(() =>
+    this.input() === '' && this.boot.showLoader() ? this.boot.hint() : '',
+  );
 
   constructor(
     private readonly host: ElementRef<HTMLElement>,
@@ -140,8 +233,16 @@ export class Terminal implements TerminalCommandContext {
     destroyRef.onDestroy(() => {
       alive = false;
     });
-    if (!this.config.user) {
+    if (this.config.user) {
+      // Nothing to look up, but the source still counts as settled.
+      this.boot.mark('identity');
+    } else {
       void this.settings.guestName().then((name) => {
+        /*
+          Marked unconditionally: this is app-level readiness, not view state, so a
+          view torn down mid-read must not leave the loader waiting forever.
+        */
+        this.boot.mark('identity');
         if (alive) this.guest.set(name);
       });
     }
@@ -158,6 +259,12 @@ export class Terminal implements TerminalCommandContext {
    */
   private async restore(): Promise<void> {
     const stored = await this.store.load();
+    /*
+      Marked before the early return: boot has to complete whether or not there
+      was anything to restore, otherwise an empty history would leave the loader
+      hanging on a source that is never going to answer.
+    */
+    this.boot.mark('history');
     if (stored.length === 0) return;
     this.commands.update((current) => [...stored.map((command) => command.text), ...current]);
   }
@@ -287,17 +394,37 @@ export class Terminal implements TerminalCommandContext {
     this.recordBlock(buffer);
     this.rememberCommand(command);
 
-    const invocation = findCommand(command);
-    if (invocation) {
-      invocation.command.run(this, invocation.args);
+    // An empty line runs nothing: bash prints no reply and leaves $? untouched,
+    // so this must return before the not-found path can claim the blank as a
+    // missing command named "".
+    if (command.trim() === '') return;
+
+    const resolution = resolveCommand(command);
+
+    if (resolution.found) {
+      // Nothing here can fail yet, so a completed command is status 0. When a
+      // real exec lands, it should set whatever the child exited with instead.
+      resolution.command.run(this, resolution.args);
+      this.lastStatus.set(0);
+      return;
     }
+
+    this.printOutput([commandNotFound(this.config.shell, resolution.name)]);
+    this.lastStatus.set(EXIT_NOT_FOUND);
   }
 
   /** Echo a finished block on screen, one entry per physical line. Not persisted. */
   private recordBlock(buffer: string): void {
+    /*
+      Read the status *now*, before anything runs: this is the glyph the prompt
+      was actually showing while the line was being typed. By the time submit
+      resolves the command, lastStatus has already moved on.
+    */
+    const failed = this.failed();
     const lines: RenderLine[] = buffer.split('\n').map((text, index) => ({
       text,
       kind: index === 0 ? 'primary' : 'continuation',
+      failed,
     }));
     this.scrollback.update((scrollback) => [...scrollback, ...lines]);
   }
@@ -339,6 +466,9 @@ export class Terminal implements TerminalCommandContext {
   private settleCaret(): void {
     this.typing.set(true);
     clearTimeout(this.typingTimer);
-    this.typingTimer = setTimeout(() => this.typing.set(false), this.config.cursor.steadyAfterKeyMs);
+    this.typingTimer = setTimeout(
+      () => this.typing.set(false),
+      this.config.cursor.steadyAfterKeyMs,
+    );
   }
 }

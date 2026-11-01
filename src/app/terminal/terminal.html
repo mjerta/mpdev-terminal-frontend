@@ -6,21 +6,32 @@
     (scroll)="onScroll($event)"
   >
     @for (line of scrollback(); track $index) {
-      <p class="break-all whitespace-pre-wrap">
-        <span class="text-primary">{{ promptFor(line.kind) }}</span><span>{{ line.text }}</span>
+      <p class="break-all whitespace-pre-wrap" [class.prompt-gap]="showsGapBefore(line.kind)">
+        @for (seg of segmentsFor(line); track $index) {
+          <span [class]="seg.classes">{{ seg.text }}</span>
+        }
+        <span>{{ line.text }}</span>
       </p>
     }
 
     <!--
       The block being typed, one <p> per logical line. The caret only exists on
-      the last one, and still simply trails that line's text, so no cell math is
-      needed: the browser lays it out.
-
-      $index === 0 gets PS1; anything below it is a continuation, so it gets PS2.
+      the last one and still simply trails that line's text, so the browser
+      places it and no cell math is needed.
     -->
     @for (line of logicalLines(); track $index) {
-      <p class="break-all whitespace-pre-wrap">
-        <span class="text-primary">{{ $index === 0 ? prompt() : continuationPrompt() }}</span><span>{{ line }}</span>
+      <p
+        class="break-all whitespace-pre-wrap"
+        [class.prompt-gap]="showsGapBefore($index === 0 ? 'primary' : 'continuation')"
+      >
+        @for (seg of liveSegments($index === 0); track $index) {
+          <span [class]="seg.classes">{{ seg.text }}</span>
+        }
+        <span>{{ line }}</span>
+        @if ($last && bootHint()) {
+          <!-- Muted and classed, so it can never be read as typed input. -->
+          <span class="text-muted-foreground">{{ bootHint() }}</span>
+        }
         @if ($last) {
           <span class="caret" [class.caret--steady]="typing()"></span>
         }

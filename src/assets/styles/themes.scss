@@ -19,6 +19,18 @@
   --color-card: color-mix(in oklab, var(--surface) 88%, var(--text-main));
   --color-muted: color-mix(in oklab, var(--surface) 78%, var(--text-main));
   --color-border: color-mix(in oklab, var(--text-main) 20%, transparent);
+
+  /*
+    Starship colours its segments by ANSI name, so the prompt asks for "cyan"
+    rather than a literal hue. Resolving that against the active palette is what
+    makes the prompt recolour with the theme selector, the same way a real
+    terminal's colours come from its scheme rather than from the program.
+
+    Only the names this prompt actually uses are mapped. Add siblings (blue,
+    green, the bright variants) when a segment needs them, since a full 16-colour
+    table across ten palettes is data no prompt here asks for yet.
+  */
+  --color-ansi-cyan: var(--primary);
 }
 
 /*
@@ -63,12 +75,79 @@ html {
   padding-left: env(safe-area-inset-left, 0px);
 }
 
+/*
+  Fallback for anything outside a [data-theme] scope. These must stay identical to
+  the default theme in main-container.ts: the palette transition below is always
+  armed, so a differing fallback would be interpolated away on first paint and the
+  page would visibly fade out of a theme nobody chose.
+*/
 :root {
-  --surface: #1e1e2e;
-  --primary: #89b4fa;
-  --accent: #f38ba8;
-  --text-main: #cdd6f4;
-  --text-muted: #a6adc8;
+  --surface: #1a1b26;
+  --primary: #7aa2f7;
+  --accent: #f7768e;
+  --text-main: #c0caf5;
+  --text-muted: #565f89;
+}
+
+/*
+  Registered so the palette can be *interpolated*.
+
+  An unregistered custom property is an opaque string to the browser: changing it
+  flips every `var()` that reads it in one frame, and `transition: --primary` does
+  nothing at all. Declaring a syntax turns each token into a real animatable
+  <color>, which is what lets a theme change ease instead of snap.
+
+  One rule on the scope that carries `data-theme` is then enough for the whole
+  tree: descendants inherit the animated value, and the Tailwind tokens are
+  `inline` var() references, so `bg-surface` / `text-foreground` follow the
+  interpolation with no per-element transition rules.
+
+  This is also how the stored theme arrives. It is applied when the boot screen
+  lifts rather than the millisecond IndexedDB answers, so the visitor's own palette
+  is the first one painted on the terminal - and it fades in from the default over
+  the duration below, which is the "slowly, after the boot" the design asks for.
+*/
+@property --surface {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #1e1e2e;
+}
+@property --primary {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #89b4fa;
+}
+@property --accent {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #f38ba8;
+}
+@property --text-main {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #cdd6f4;
+}
+@property --text-muted {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #a6adc8;
+}
+
+/* The settle duration. Long enough to read as a transition, short enough not to
+   make the theme dropdown feel laggy. */
+[data-theme] {
+  transition:
+    --surface 450ms ease-out,
+    --primary 450ms ease-out,
+    --accent 450ms ease-out,
+    --text-main 450ms ease-out,
+    --text-muted 450ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-theme] {
+    transition: none;
+  }
 }
 
 /* --- TOP 10 TERMINALCOLOR.COM THEMES --- */

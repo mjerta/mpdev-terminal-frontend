@@ -1,0 +1,34 @@
+/*
+ * Terminal mono, bundled rather than resolved from the visitor's machine.
+ *
+ * Two reasons this is a real dependency and not a cosmetic one:
+ *
+ * 1. The caret is an inline box one character wide, so the whole terminal
+ *    layout rests on `1ch` being stable. Depending on a locally installed family
+ *    means the metrics change per visitor and per OS.
+ * 2. Starship's symbols (`❯`, and later the git-status glyphs) are not present in
+ *    every system mono stack.
+ *
+ * The family name deliberately matches the installed one. A @font-face rule
+ * shadows a system font of the same name, so this machine now renders from the
+ * bundled face too, rather than looking right here and different everywhere
+ * else. No local() source for the same reason.
+ *
+ * Only Regular and Bold are shipped: at `~` the prompt uses bold but not italic.
+ * Add the Italic face alongside a `[git_branch] style = "italic ..."` segment.
+ */
+@font-face {
+  font-family: 'JetBrainsMono Nerd Font';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/JetBrainsMonoNerdFont-Regular.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'JetBrainsMono Nerd Font';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/JetBrainsMonoNerdFont-Bold.woff2') format('woff2');
+}

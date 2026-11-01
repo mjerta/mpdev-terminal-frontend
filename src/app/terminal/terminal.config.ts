@@ -18,10 +18,33 @@ export interface TerminalConfig {
   readonly cwd: string;
   readonly promptSymbol: string;
   /**
+   * `[character] error_symbol`, shown when the previous command exited non-zero.
+   * Your config renders it bold cyan exactly like success_symbol, so only the
+   * glyph changes: `✗` rather than `❯`.
+   */
+  readonly errorSymbol: string;
+  /**
+   * Name the shell reports itself as when a command is not found, matching
+   * `bash: foo: command not found`. Your `$SHELL` is bash, so this mirrors the
+   * machine the fiction is standing in for.
+   */
+  readonly shell: string;
+  /**
    * The continuation marker, i.e. PS2. Starship leaves PS2 alone, so a real
    * shell falls back to bash's `>`; we mirror that rather than invent a style.
    */
   readonly continuationSymbol: string;
+  /**
+   * starship's `add_newline`: a blank line above each prompt, which is most of
+   * what makes it read as starship rather than a plain shell.
+   */
+  readonly addNewline: boolean;
+  /**
+   * Show `user@host`. Your real config renders neither, because starship only
+   * surfaces them over ssh or for root; this prototype wants them on screen, so
+   * they are shown dim rather than as part of the starship emphasis.
+   */
+  readonly showUserHost: boolean;
   readonly font: {
     readonly family: string;
     readonly size: string;
@@ -44,7 +67,11 @@ export const FICTIONAL_TERMINAL: TerminalConfig = {
   // directory rather than inventing a path that implies a real checkout.
   cwd: '~',
   promptSymbol: '❯',
+  errorSymbol: '✗',
+  shell: 'bash',
   continuationSymbol: '>',
+  addNewline: true,
+  showUserHost: true,
   font: {
     // Same stack as @theme in styles/terminal.scss; this one wins at runtime.
     family:
