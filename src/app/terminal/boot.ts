@@ -91,6 +91,11 @@ export class TerminalBoot {
     return this.settled().has(source);
   }
 
+  /** Milliseconds since the app booted. `neofetch` prints this as uptime. */
+  uptimeMs(): number {
+    return Date.now() - this.startedAt;
+  }
+
   mark(source: BootSource): void {
     if (this.settled().has(source)) return;
     this.settled.update((current) => new Set(current).add(source));

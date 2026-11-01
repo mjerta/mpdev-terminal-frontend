@@ -193,6 +193,103 @@ describe('Terminal', () => {
     });
   });
 
+  describe('neofetch', () => {
+    const block = (): HTMLElement | null =>
+      (fixture.nativeElement as HTMLElement).querySelector('app-neofetch');
+
+    /** The report row for a label, read the way the template lays it out. */
+    const reportValue = (label: string): string | undefined =>
+      Array.from(block()?.querySelectorAll('.row') ?? [])
+        .find((row) => row.querySelector('dt')?.textContent?.trim() === label)
+        ?.querySelector('dd')
+        ?.textContent?.trim();
+
+    it('places the block directly under the echoed command', () => {
+      run('neofetch');
+
+      const echoed = paragraphs().find((p) => p.textContent?.includes('neofetch'));
+      expect(echoed).toBeTruthy();
+      // A block, not text: the next thing after the echoed line is the component,
+      // not an output paragraph.
+      expect(echoed?.nextElementSibling?.tagName).toBe('APP-NEOFETCH');
+      expect(block()).toBeTruthy();
+    });
+
+    it('counts itself in the command total', () => {
+      run('help');
+      run('neofetch');
+      // `history` records before running, so by the time the report is drawn the
+      // command that asked for it is already in the list.
+      expect(reportValue('Commands')).toBe('2');
+    });
+
+    it('is erased by clear, like any other screen output', () => {
+      run('neofetch');
+      expect(block()).toBeTruthy();
+
+      run('clear');
+      expect(block()).toBeNull();
+      // The history is separate and survives, which is the same rule `clear`
+      // follows for printed lines.
+      run('history');
+      expect(outputs()).toContain('1  neofetch');
+    });
+  });
+
+  describe('motd', () => {
+    const boot = (): TerminalBoot => TestBed.inject(TerminalBoot);
+    const blocks = (): HTMLElement[] =>
+      Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('app-neofetch'));
+
+    /** Settle every source and wait out the dwell, the way a real load does. */
+    async function reveal(): Promise<void> {
+      boot().mark('identity');
+      boot().mark('history');
+      boot().mark('theme');
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      fixture.detectChanges();
+    }
+
+    it('prints the report at the reveal, above the live prompt', async () => {
+      expect(blocks()).toHaveLength(0);
+
+      await reveal();
+
+      expect(blocks()).toHaveLength(1);
+      // The live prompt is the next element, so the greeting sits above what the
+      // visitor is about to type rather than being pushed under it.
+      const next = blocks()[0].nextElementSibling;
+      expect(next?.tagName).toBe('P');
+      expect(next?.textContent).toContain('@mpdev');
+    });
+
+    it('prints it once and only once, however much is typed afterwards', async () => {
+      await reveal();
+      expect(blocks()).toHaveLength(1);
+
+      run('help');
+      // Still one: the effect fires on the reveal, not on every scrollback edit.
+      expect(blocks()).toHaveLength(1);
+
+      run('clear');
+      // `clear` erases the screen and the greeting stays erased; it is not re-printed
+      // into the blank screen the way a real shell's MOTD would not be either.
+      expect(blocks()).toHaveLength(0);
+      run('help');
+      expect(blocks()).toHaveLength(0);
+    });
+
+    it('stays out of the way when the visitor already ran a command', async () => {
+      run('help');
+      expect(blocks()).toHaveLength(0);
+
+      await reveal();
+      // A report printed under the visitor's own output would read as that
+      // command's output, so the greeting yields to anything already on screen.
+      expect(blocks()).toHaveLength(0);
+    });
+  });
+
   describe('boot', () => {
     const identityVisible = (): boolean =>
       (fixture.nativeElement as HTMLElement).textContent?.includes('@mpdev') ?? false;

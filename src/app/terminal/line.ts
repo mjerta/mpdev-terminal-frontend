@@ -3,13 +3,26 @@
  * starship-flavoured prompt), `continuation` is PS2 (what bash shows after a
  * trailing backslash), and `output` is machine text a command printed, which
  * carries no prompt.
+ *
+ * `neofetch` is the one entry that is not text at all: it is a placeholder for a
+ * component, because that report is a logo plus a two-column layout and cannot be
+ * expressed as the monospace lines `output` is limited to. Everything else stays
+ * a string on purpose, so the common case keeps needing no cell measurement.
  */
-export type LineKind = 'primary' | 'continuation' | 'output';
+export type LineKind = 'primary' | 'continuation' | 'output' | 'neofetch';
 
 /** One physical line of scrollback, in the shape the template renders it. */
 export interface RenderLine {
   readonly text: string;
   readonly kind: LineKind;
+  /**
+   * For `neofetch` only: app uptime when the block was printed.
+   *
+   * Captured here rather than read from the live clock at render time, because a
+   * report is a snapshot. Scrolling back to a block printed ten minutes ago must
+   * still say "12s", the way the terminal printed it.
+   */
+  readonly uptimeMs?: number;
   /**
    * For a primary prompt: whether the previous command had failed at the moment
    * this line was echoed, which decides `❯` vs `✗`.

@@ -56,6 +56,23 @@ export interface TerminalConfig {
     /** How long the caret stays solid after a keystroke. */
     readonly steadyAfterKeyMs: number;
   };
+  /**
+   * What `neofetch` claims about this machine.
+   *
+   * Kept in the same map as the prompt so the two cannot describe different
+   * machines: the logo says `mpdev`, the prompt says `@mpdev`, and both read this
+   * one object.
+   *
+   * Only things this app can honestly claim. There is no CPU, GPU or memory
+   * figure, because the terminal is a page rather than a machine, and inventing a
+   * spec block would be the one lie the rest of this prototype avoids: every other
+   * number it prints - uptime, command count, resolution - is measured.
+   */
+  readonly system: {
+    readonly os: string;
+    readonly kernel: string;
+    readonly terminal: string;
+  };
 }
 
 export const FICTIONAL_TERMINAL: TerminalConfig = {
@@ -82,5 +99,12 @@ export const FICTIONAL_TERMINAL: TerminalConfig = {
   cursor: {
     blinkMs: 1060,
     steadyAfterKeyMs: 500,
+  },
+  system: {
+    // The fiction, stated plainly: a browser page presenting itself as a
+    // terminal, rather than a browser pretending to be a Linux box.
+    os: 'mpdev web terminal',
+    kernel: 'web',
+    terminal: 'mpdev-terminal',
   },
 };
