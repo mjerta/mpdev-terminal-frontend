@@ -1,7 +1,55 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { formatUptime, Neofetch } from './neofetch';
+import { formatUptime, Neofetch, snapToWholeCells } from './neofetch';
 import { FICTIONAL_TERMINAL } from '../terminal.config';
+
+describe('snapToWholeCells', () => {
+  /*
+    A cell that is a fraction of a device pixel wide is the whole bug: the
+    rasteriser rounds each glyph separately, so the block letters come out with
+    alternating stem widths. These tests hold the property that fixes it, rather
+    than the specific numbers, because the numbers depend on the ratio.
+  */
+  const cellIsWhole = (sizePx: number, ratio: number, dpr: number): boolean =>
+    Math.abs(sizePx * ratio * dpr - Math.round(sizePx * ratio * dpr)) < 1e-6;
+
+  it('lands the cell on a whole device pixel', () => {
+    for (const dpr of [1, 2, 3, 1.5, 2.75, 3.5]) {
+      const snapped = snapToWholeCells(9.28571, 0.6, dpr);
+      expect(snapped).not.toBeNull();
+      expect(cellIsWhole(snapped!, 0.6, dpr)).toBe(true);
+    }
+  });
+
+  it('never makes the art wider than CSS asked for', () => {
+    // Rounding up would break the fit against the container, which is the other
+    // promise the logo makes.
+    for (const dpr of [1, 2, 3]) {
+      expect(snapToWholeCells(9.28571, 0.6, dpr)!).toBeLessThanOrEqual(9.28571);
+    }
+  });
+
+  it('loses no width when the size already lands on the grid', () => {
+    // 15px * 0.6 = 9 device px, so the desktop cap needs no adjusting.
+    expect(snapToWholeCells(15, 0.6, 1)).toBe(15);
+    expect(snapToWholeCells(10, 0.6, 1 / 0.6)).toBe(10);
+  });
+
+  it('gives up rather than collapse the art when one cell is all there is', () => {
+    // Below one step the only whole-pixel size is zero. CSS keeps control there.
+    expect(snapToWholeCells(0.2, 0.6, 3)).toBeNull();
+  });
+
+  it('returns nothing for measurements that are not measurements', () => {
+    // jsdom has no layout engine: getComputedStyle reports an empty font size,
+    // which parses to NaN. The component must leave the CSS value alone.
+    expect(snapToWholeCells(NaN, 0.6, 2)).toBeNull();
+    expect(snapToWholeCells(0, 0.6, 2)).toBeNull();
+    expect(snapToWholeCells(-3, 0.6, 2)).toBeNull();
+    expect(snapToWholeCells(9, 0, 2)).toBeNull();
+    expect(snapToWholeCells(9, 0.6, 0)).toBeNull();
+  });
+});
 
 describe('Neofetch', () => {
   let fixture: ComponentFixture<Neofetch>;
@@ -30,6 +78,17 @@ describe('Neofetch', () => {
 
   afterEach(() => {
     fixture.destroy();
+  });
+
+  it('leaves the size alone when there is no layout to measure', () => {
+    /*
+      The snap reads the element's used font size, which jsdom does not compute.
+      Without this guard the missing measurement would become `font-size: NaNpx`,
+      and a browser that only runs the unit tests would never notice.
+    */
+    render();
+    const art = (fixture.nativeElement as HTMLElement).querySelector('pre') as HTMLElement;
+    expect(art.style.fontSize).toBe('');
   });
 
   it('prints the logo as a rectangular block', () => {

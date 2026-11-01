@@ -1,4 +1,13 @@
-import { Component, OnInit, input } from '@angular/core';
+import {
+  Component,
+  ElementRef,
+  OnInit,
+  Renderer2,
+  afterNextRender,
+  inject,
+  input,
+  viewChild,
+} from '@angular/core';
 
 import { FICTIONAL_TERMINAL } from '../terminal.config';
 
@@ -65,9 +74,57 @@ export class Neofetch implements OnInit {
   protected who = '';
   protected details: readonly Detail[] = [];
 
+  private readonly logo = viewChild<ElementRef<HTMLElement>>('logo');
+  private readonly renderer = inject(Renderer2);
+
+  constructor() {
+    /*
+      The art is laid out in cells, and it only reads as solid letters when a cell
+      edge lands on a whole device pixel. See `snapToWholeCells`.
+
+      Registered after render because it measures the element. The returned function
+      is the teardown: Angular drops the window listener with the view, so a scrollback
+      full of reports does not accumulate listeners.
+
+      Deliberately not part of the snapshot in `details`: this is presentation, and it
+      has to keep answering to the viewport when the phone rotates.
+    */
+    afterNextRender(() => {
+      this.sizeLogo();
+      const stopResize = this.renderer.listen('window', 'resize', () => this.sizeLogo());
+      /*
+        The bundled face can finish loading after the first measure, and the metrics
+        come from whichever font is actually drawn. Re-run once it has settled; the
+        viewChild is empty by then if the view has gone, so a destroyed block is safe.
+      */
+      void document.fonts?.ready.then(() => this.sizeLogo());
+      return () => stopResize();
+    });
+  }
+
   ngOnInit(): void {
     this.who = this.user();
     this.details = this.describe();
+  }
+
+  /**
+   * Round the art's font size down to one whose cell is a whole device pixel.
+   *
+   * CSS owns the choice of size - the share of the viewport, the cap at the
+   * terminal's text size - so this asks it what it picked, then takes the nearest
+   * size at or below that answer. Nothing is duplicated, and if the browser cannot
+   * measure (jsdom, or a font size of zero) the CSS value simply stands.
+   */
+  private sizeLogo(): void {
+    const el = this.logo()?.nativeElement;
+    if (!el) return;
+
+    this.renderer.removeStyle(el, 'font-size');
+    const ideal = parseFloat(getComputedStyle(el).fontSize);
+    const snapped = snapToWholeCells(ideal, this.config.font.advanceRatio, devicePixelRatio);
+    if (snapped === null || Math.abs(snapped - ideal) < 1e-6) return;
+
+    this.renderer.setStyle(el, 'font-size', `${snapped}px`);
   }
 
   /**
@@ -116,6 +173,40 @@ export class Neofetch implements OnInit {
     const height = screen?.height || innerHeight;
     return `${Math.round(width * dpr)}x${Math.round(height * dpr)}`;
   }
+}
+
+/**
+ * The largest font size at or below `idealPx` whose glyph cell is a whole number
+ * of device pixels, or null when there is nothing sensible to snap to.
+ *
+ * Monospace art is a grid of cells, and a cell of `0.6 * 9.286px * 3` is 16.7
+ * device pixels wide. The rasteriser cannot put an edge on a seventh of a pixel,
+ * so it rounds each glyph separately: the stems of `║` land two device pixels wide
+ * in one row and three in the next, and the block letters look lean and uneven.
+ * This is the "slightly slanted logo" that shows up on phones, and it is purely a
+ * consequence of the size, not the font.
+ *
+ * Sizing so the cell is integral fixes it: cell widths are `advanceRatio * size *
+ * dpr`, so the sizes that work are spaced `1 / (advanceRatio * dpr)` apart, and
+ * rounding down to that grid keeps the art inside the width CSS already chose.
+ *
+ * Rounding down rather than to nearest matters: the fit guarantee is against the
+ * container, and the nearest snap can sit above it.
+ */
+export function snapToWholeCells(
+  idealPx: number,
+  advanceRatio: number,
+  devicePixelRatio: number,
+): number | null {
+  if (!(idealPx > 0) || !(advanceRatio > 0) || !(devicePixelRatio > 0)) return null;
+
+  const step = 1 / (advanceRatio * devicePixelRatio);
+  const cells = Math.floor(idealPx / step + 1e-9);
+  // Under one step there is no whole-pixel size that still shows the art; leave it
+  // to CSS rather than collapsing the logo to nothing.
+  if (cells < 1) return null;
+
+  return +(cells * step).toFixed(6);
 }
 
 /**
