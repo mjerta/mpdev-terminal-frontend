@@ -53,6 +53,15 @@ export interface TerminalConfig {
     readonly family: string;
     readonly size: string;
     readonly lineHeight: string;
+    /**
+     * Glyph advance as a fraction of the font size: 600 units per 1000 upem.
+     *
+     * Not cosmetic. The `neofetch` logo is laid out in cells, so its width is
+     * `columns * advanceRatio * fontSize`, which is what decides the size that
+     * keeps 48 columns on screen. It also decides which font sizes put a cell edge
+     * exactly on a device pixel - see `snapToWholeCells` in neofetch.ts.
+     */
+    readonly advanceRatio: number;
   };
   readonly cursor: {
     /** Full blink cycle. Half on, half off, with hard edges. */
@@ -99,6 +108,8 @@ export const FICTIONAL_TERMINAL: TerminalConfig = {
       "'JetBrainsMono Nerd Font', 'JetBrainsMono NF', 'Adwaita Mono', ui-monospace, monospace",
     size: '0.9375rem',
     lineHeight: '1.45',
+    // 600 units per 1000 upem, measured from the bundled face. See the interface.
+    advanceRatio: 0.6,
   },
   cursor: {
     blinkMs: 1060,

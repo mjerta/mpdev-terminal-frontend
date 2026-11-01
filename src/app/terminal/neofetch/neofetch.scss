@@ -34,18 +34,31 @@
 .logo {
   margin: 0;
   /*
-    48 columns at 0.6em is 28.8em of art, so the divisor below is what decides
-    how much of the terminal it fills.
+    Tailwind's preflight sets `code, kbd, samp, pre` to its own default mono
+    stack, which beats inheritance - so without this the art is drawn in
+    `ui-monospace, SFMono-Regular, Menlo, ...` rather than the terminal font,
+    and the config's careful stack is ignored. That matters for the block
+    letters: on a phone the platform mono may not carry the box-drawing range at
+    all, so the browser substitutes a different font per glyph, those fonts
+    disagree about how wide a cell is, and every column to the right of a
+    substituted glyph drifts. That is the slant. Inheriting keeps the whole
+    picture in the one bundled font, where every cell is the same width.
+  */
+  font-family: inherit;
+  /*
+    48 columns at this font's 0.6em advance is 28.8em of art, so the divisor is
+    what decides how much of the terminal it fills.
 
     Sized against the viewport rather than the container on purpose. A browser
     without container-query support does not fall back to the previous rule - it
     throws away the whole declaration, leaving the art at the terminal's own text
-    size, which is 432px and overflows every phone. `vw` is universally
-    supported, so there is only one sizing path and it works everywhere.
+    size, which is 432px and overflows every phone. `vw` is universally supported,
+    so there is one sizing path and it works everywhere.
 
-    Dividing by 42 leaves the logo at about three quarters of the terminal's
-    width on a phone: a deliberate margin, not a near miss. The min() still caps
-    it at the terminal's text size, so tablets and desktops keep the full 432px.
+    Dividing by 42 leaves the logo at about three quarters of the terminal's width
+    on a phone, and the min() caps it at the terminal's text size so tablets and
+    desktops keep the full 432px. The component then rounds this down to the
+    nearest size whose cell is a whole device pixel; see `snapToWholeCells`.
   */
   font-size: min(var(--text-terminal, 0.9375rem), calc(100vw / 42));
   /*
