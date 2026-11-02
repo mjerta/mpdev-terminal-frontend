@@ -1,6 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { BOOT_TIMING, TerminalBoot } from '../../terminal/boot';
+import { REVEAL_TIMING } from '../../terminal/neofetch/neofetch';
 import { SettingsStore } from '../../terminal/settings.store';
 import { MainContainer } from './main-container';
 
@@ -40,6 +41,22 @@ describe('MainContainer', () => {
     fixture.detectChanges();
   };
 
+  /**
+   * Wait for the greeting's report to finish arriving.
+   *
+   * Polled rather than a fixed delay: the block is only created when the boot
+   * screen lifts, so its typing starts later than the dwell this file otherwise
+   * waits for, and a report caught mid-sentence has no rows to read yet.
+   */
+  async function reportTyped(): Promise<void> {
+    for (let i = 0; i < 250; i++) {
+      const report = (fixture.nativeElement as HTMLElement).querySelector('.neofetch');
+      if (report && report.getAttribute('aria-busy') === null) return;
+      await new Promise((resolve) => setTimeout(resolve, 2));
+      fixture.detectChanges();
+    }
+  }
+
   async function render(settings: FakeSettings): Promise<void> {
     TestBed.resetTestingModule();
     await TestBed.configureTestingModule({
@@ -49,6 +66,8 @@ describe('MainContainer', () => {
         // Long enough to observe, short enough not to slow the suite. The
         // backstop is effectively off so the reveal is decided by the dwell.
         { provide: BOOT_TIMING, useValue: { minimumMs: 250, timeoutMs: 60_000 } },
+        // The greeting types itself in; this keeps that from being the wait.
+        { provide: REVEAL_TIMING, useValue: { msPerToken: 1 } },
       ],
     }).compileComponents();
 
@@ -88,12 +107,13 @@ describe('MainContainer', () => {
     */
     await render(new FakeSettings({ theme: 'dracula' }));
     await waited(350);
+    await reportTyped();
 
     const rows = Array.from(
       (fixture.nativeElement as HTMLElement).querySelectorAll('app-neofetch .row'),
     );
     const reported = rows
-      .find((row) => row.querySelector('dt')?.textContent?.trim() === 'Theme')
+      .find((row) => row.querySelector('dt')?.textContent?.trim() === 'Theme:')
       ?.querySelector('dd')
       ?.textContent?.trim();
 

@@ -1,11 +1,14 @@
 import {
   Component,
   ElementRef,
+  InjectionToken,
   OnInit,
   Renderer2,
   afterNextRender,
+  computed,
   inject,
   input,
+  signal,
   viewChild,
 } from '@angular/core';
 
@@ -17,12 +20,153 @@ interface Detail {
   readonly value: string;
 }
 
+/** Reveal cadence for the report. Its own token so tests need not wait a second. */
+export const REVEAL_TIMING = new InjectionToken<{ readonly msPerToken: number }>(
+  'neofetch.revealTiming',
+  {
+    providedIn: 'root',
+    factory: () => FICTIONAL_TERMINAL.reveal,
+  },
+);
+
+/**
+ * Whether the visitor has asked for less motion.
+ *
+ * A token rather than a call at the use site: the preference is an environment
+ * fact, it is only worth reading once, and jsdom has no way to report it - so a
+ * direct call would leave the one behaviour that has to do nothing on request
+ * untestable.
+ */
+export const REDUCED_MOTION = new InjectionToken<boolean>('neofetch.reducedMotion', {
+  providedIn: 'root',
+  factory: () =>
+    typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches,
+});
+
+/** Where on screen a landed word goes. */
+export type StreamSlot = 'user' | 'host' | 'label' | 'value';
+
+/**
+ * The smallest thing the stream emits: one word, and the slot it lands in.
+ *
+ * Words rather than characters because the report is a layout, not a string: a
+ * label and its value sit in different grid cells, so there is no single line of
+ * text to slice. A word is the largest unit that still has one obvious home.
+ */
+export interface StreamWord {
+  readonly slot: StreamSlot;
+  /** Index into the report's rows; -1 for the identity line. */
+  readonly row: number;
+  readonly text: string;
+}
+
+/** A row as far as it has been typed: the label always arrives whole. */
+export interface ShownRow {
+  readonly label: string;
+  readonly value: string;
+}
+
+/** Everything the template needs to know about how far the typing has got. */
+export interface Reveal {
+  readonly user: string;
+  readonly host: string;
+  readonly rows: readonly ShownRow[];
+  /**
+   * Row holding the last word that landed, which is where the cursor sits: -1 for
+   * the identity line. Null once the report is complete, and before it starts.
+   */
+  readonly caretRow: number | null;
+  readonly done: boolean;
+}
+
+/**
+ * The whole report as the order it is typed out in, one word per entry.
+ *
+ * Computed once when the block is created rather than derived on every tick: the
+ * text is a snapshot, so the plan cannot change under the stream.
+ */
+export function streamWords(
+  who: string,
+  host: string,
+  details: readonly { readonly label: string; readonly value: string }[],
+): readonly StreamWord[] {
+  const words: StreamWord[] = [];
+  if (who) words.push({ slot: 'user', row: -1, text: who });
+  if (host) words.push({ slot: 'host', row: -1, text: host });
+
+  details.forEach((detail, index) => {
+    if (detail.label) words.push({ slot: 'label', row: index, text: detail.label });
+    for (const word of detail.value.split(/\s+/)) {
+      if (word) words.push({ slot: 'value', row: index, text: word });
+    }
+  });
+
+  return words;
+}
+
+/**
+ * The report as it looks after `emitted` words have landed.
+ *
+ * The one promise this makes, and the reason the effect reads as output rather
+ * than as a fade-in: what is on screen is always a *prefix* of the finished
+ * report. Nothing is rewritten, nothing is reordered, and a word that has landed
+ * never moves.
+ */
+export function revealAt(words: readonly StreamWord[], emitted: number): Reveal {
+  const shown = Math.max(0, Math.min(emitted, words.length));
+  let user = '';
+  let host = '';
+  let caretRow: number | null = null;
+  const labels = new Map<number, string>();
+  const values = new Map<number, string[]>();
+
+  for (let i = 0; i < shown; i++) {
+    const word = words[i];
+    caretRow = word.row;
+    switch (word.slot) {
+      case 'user':
+        user = word.text;
+        break;
+      case 'host':
+        host = word.text;
+        break;
+      case 'label':
+        labels.set(word.row, word.text);
+        break;
+      case 'value':
+        values.set(word.row, [...(values.get(word.row) ?? []), word.text]);
+        break;
+    }
+  }
+
+  // In row order, and only as far as the typing has reached: a row whose label has
+  // not landed does not exist yet, which is what makes the block grow downwards.
+  const placed: { row: number; label: string; value: string }[] = [];
+  labels.forEach((label, row) =>
+    placed.push({ row, label, value: (values.get(row) ?? []).join(' ') }),
+  );
+  placed.sort((a, b) => a.row - b.row);
+
+  return {
+    user,
+    host,
+    rows: placed.map(({ label, value }) => ({ label, value })),
+    /*
+      The cursor marks "more is coming", so it goes when the last word lands. One
+      that outlives the stream reads as a prompt waiting for input, and this block
+      is output, not input.
+    */
+    caretRow: shown >= words.length ? null : caretRow,
+    done: shown >= words.length,
+  };
+}
+
 /**
  * Block-letter MPDEV in the "ANSI Shadow" style.
  *
  * Every row is exactly 48 columns wide, which is not cosmetic: the stylesheet
- * sizes the art as `48 * 0.6em` (JetBrains Mono's advance width) against the
- * container, so a row that was a column short or long would leave the logo
+ * sizes the art from that width (`48 * 0.6em`, JetBrains Mono's advance) against
+ * the viewport, so a row that was a column short or long would leave the logo
  * clipped on one edge or drifting away from the right margin on the other.
  * `neofetch.spec.ts` holds that invariant.
  */
@@ -49,6 +193,10 @@ const LOGO = [
  * renders, rather than read live from the inputs. Scrolling back to a `neofetch`
  * from five minutes ago must still show the uptime and command count it printed
  * then, not today's numbers under yesterday's logo.
+ *
+ * The text then arrives a word at a time, the way streamed output does. Only the
+ * text: the logo is the block's shape, and making it arrive gradually would mean
+ * the report sliding around the screen as the art grew.
  */
 @Component({
   selector: 'app-neofetch',
@@ -74,8 +222,29 @@ export class Neofetch implements OnInit {
   protected who = '';
   protected details: readonly Detail[] = [];
 
+  /**
+   * Width to reserve for the label column, in cells.
+   *
+   * Computed from the finished report rather than from what has landed, because
+   * the grid's max-content column grows each time a longer label arrives and
+   * would otherwise shove every value already on screen to the right. `ch` is one
+   * cell in a monospace font, and the colon is one of those cells.
+   */
+  protected labelColumn = 'max-content';
+
+  /** The report in typing order. Fixed once built: a snapshot cannot reflow. */
+  private readonly words = signal<readonly StreamWord[]>([]);
+  /** How many words have landed. The only thing the timer touches. */
+  private readonly emitted = signal(0);
+  private revealTimer: ReturnType<typeof setInterval> | undefined;
+
   private readonly logo = viewChild<ElementRef<HTMLElement>>('logo');
   private readonly renderer = inject(Renderer2);
+  private readonly timing = inject(REVEAL_TIMING);
+  private readonly reducedMotion = inject(REDUCED_MOTION);
+
+  /** What the template draws: the report as far as it has been typed. */
+  protected readonly stream = computed(() => revealAt(this.words(), this.emitted()));
 
   constructor() {
     /*
@@ -91,6 +260,7 @@ export class Neofetch implements OnInit {
     */
     afterNextRender(() => {
       this.sizeLogo();
+      this.startStream();
       const stopResize = this.renderer.listen('window', 'resize', () => this.sizeLogo());
       /*
         The bundled face can finish loading after the first measure, and the metrics
@@ -98,13 +268,52 @@ export class Neofetch implements OnInit {
         viewChild is empty by then if the view has gone, so a destroyed block is safe.
       */
       void document.fonts?.ready.then(() => this.sizeLogo());
-      return () => stopResize();
+      return () => {
+        stopResize();
+        clearInterval(this.revealTimer);
+      };
     });
   }
 
   ngOnInit(): void {
     this.who = this.user();
     this.details = this.describe();
+    this.labelColumn = `${this.widestLabel()}ch`;
+    this.words.set(streamWords(this.who, this.config.host, this.details));
+  }
+
+  /** Longest label plus its colon, in cells. Zero rows means nothing to reserve. */
+  private widestLabel(): number {
+    return this.details.reduce((widest, detail) => Math.max(widest, detail.label.length + 1), 0);
+  }
+
+  /**
+   * Let the report arrive a word at a time.
+   *
+   * One interval, one counter: the words are already planned, so the timer has
+   * nothing to decide and the rendering is a pure function of the counter. That
+   * keeps the effect honest under load - a slow frame drops a tick, not a word.
+   */
+  private startStream(): void {
+    const total = this.words().length;
+    if (total === 0 || this.emitted() >= total) return;
+
+    // See REDUCED_MOTION: asked-for calm means no wait to read the report.
+    if (this.reducedMotion) {
+      this.emitted.set(total);
+      return;
+    }
+
+    this.revealTimer = setInterval(() => {
+      const next = this.emitted() + 1;
+      this.emitted.set(next);
+      if (next >= total) clearInterval(this.revealTimer);
+    }, this.timing.msPerToken);
+  }
+
+  /** Whether the typing cursor belongs at the end of this row. -1 is the identity. */
+  protected caretInRow(row: number): boolean {
+    return this.stream().caretRow === row;
   }
 
   /**
@@ -141,8 +350,10 @@ export class Neofetch implements OnInit {
       { label: 'Shell', value: this.config.shell },
       { label: 'Terminal', value: this.config.system.terminal },
       { label: 'Theme', value: this.theme() },
+      // Two words: "JetBrainsMono Nerd Font". Counted by the budget in the spec.
       { label: 'Font', value: this.fontName() },
       { label: 'Resolution', value: this.resolution() },
+      // Two words at most: "2h 5m" / "1m 4s" / "4s".
       { label: 'Uptime', value: formatUptime(this.uptimeMs()) },
       { label: 'Commands', value: String(this.commands()) },
     ];
