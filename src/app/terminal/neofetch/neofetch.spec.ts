@@ -227,6 +227,47 @@ describe('Neofetch', () => {
     expect(valueFor('Font')).toBe('JetBrainsMono Nerd Font');
   });
 
+  it('prints the font it was handed rather than the default', async () => {
+    const mono = FICTIONAL_TERMINAL.fonts.find((choice) => choice.id === 'mono')!;
+    render({ font: mono });
+    await typed();
+
+    expect(valueFor('Font')).toBe('monospace');
+  });
+
+  it('freezes the font row too when the choice changes afterwards', async () => {
+    /*
+      A block printed under one font keeps naming that font, even though its art
+      restyles with the app. The report is a snapshot of what was printed; the
+      picture is live CSS. The two disagreeing is correct, not a bug.
+    */
+    const bundled = FICTIONAL_TERMINAL.fonts[0];
+    render({ font: bundled });
+    await typed();
+    expect(valueFor('Font')).toBe('JetBrainsMono Nerd Font');
+
+    fixture.componentRef.setInput(
+      'font',
+      FICTIONAL_TERMINAL.fonts.find((c) => c.id === 'mono')!,
+    );
+    fixture.detectChanges();
+    expect(valueFor('Font')).toBe('JetBrainsMono Nerd Font');
+  });
+
+  it('falls back to the config ratio when there is nothing to measure', () => {
+    /*
+      The art is sized from the measured cell width of the face in use, and jsdom
+      lays nothing out. The fallback has to be the default face's ratio rather than
+      zero, because a ratio of 0 would divide the size to nothing.
+    */
+    render();
+    const art = (fixture.nativeElement as HTMLElement).querySelector('pre') as HTMLElement;
+
+    expect(art.style.getPropertyValue('--cell-ratio')).toBe(
+      String(FICTIONAL_TERMINAL.font.advanceRatio),
+    );
+  });
+
   it('reports a real resolution rather than an empty one', async () => {
     render();
     await typed();

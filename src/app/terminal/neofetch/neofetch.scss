@@ -46,8 +46,8 @@
   */
   font-family: inherit;
   /*
-    48 columns at this font's 0.6em advance is 28.8em of art, so the divisor is
-    what decides how much of the terminal it fills.
+    48 columns at this font's cell width is the art, so the divisor is what decides
+    how much of the terminal it fills.
 
     Sized against the viewport rather than the container on purpose. A browser
     without container-query support does not fall back to the previous rule - it
@@ -59,8 +59,19 @@
     on a phone, and the min() caps it at the terminal's text size so tablets and
     desktops keep the full 432px. The component then rounds this down to the
     nearest size whose cell is a whole device pixel; see `snapToWholeCells`.
+
+    The `0.6 / --cell-ratio` factor is what makes the same numbers hold for any
+    font. The art is `48 * ratio * fontSize` wide, so a face with wider cells -
+    `ui-monospace` measures 0.71em on Linux against the bundled face's 0.6em - has
+    to be sized down by that same proportion to occupy the same space. The
+    component measures the ratio of the face actually drawn and publishes it; the
+    fallback is the default face's, so the art is already the right size in the
+    frame before that measurement lands.
   */
-  font-size: min(var(--text-terminal, 0.9375rem), calc(100vw / 42));
+  font-size: min(
+    var(--text-terminal, 0.9375rem),
+    calc(100vw * 0.6 / (42 * var(--cell-ratio, 0.6)))
+  );
   /*
     iOS inflates text it thinks is too small for the screen, which would silently
     undo the sizing above and push the art back over the edge. Opting out here

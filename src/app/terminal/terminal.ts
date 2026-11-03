@@ -23,7 +23,7 @@ import { SettingsStore } from './settings.store';
 import { LineKind, RenderLine, spliceBlock, trailingBackslashes } from './line';
 import { Neofetch } from './neofetch/neofetch';
 import { buildContinuation, buildPrompt, PromptSegment } from './prompt';
-import { FICTIONAL_TERMINAL, TerminalConfig } from './terminal.config';
+import { FICTIONAL_TERMINAL, FontChoice, TerminalConfig } from './terminal.config';
 import { VisibleViewport } from './visible-viewport';
 
 /** Shared empty array: a stable reference keeps the inner loop from re-rendering. */
@@ -84,6 +84,18 @@ export class Terminal implements TerminalCommandContext {
 
   /** One-shot guard: the startup `neofetch` is printed at most once per session. */
   private motdShown = false;
+
+  /**
+   * The family in use, which starts as the config default and ends wherever the
+   * `font` command puts it.
+   *
+   * A signal rather than a field because the published CSS property, the report's
+   * `Font` row and the command's own reply all read it, and all three have to agree
+   * at any moment - including mid-session after a `font mono`.
+   */
+  protected readonly fontChoice = signal<FontChoice>(FICTIONAL_TERMINAL.fonts[0]);
+  /** What IndexedDB holds, as opposed to what is on screen. Null when never saved. */
+  private readonly savedFont = signal<string | null>(null);
 
   private readonly scroller = viewChild<ElementRef<HTMLElement>>('scroller');
   private readonly capture = viewChild<ElementRef<HTMLInputElement>>('capture');
@@ -213,10 +225,15 @@ export class Terminal implements TerminalCommandContext {
     // --animate-caret is written as the whole shorthand on purpose: a nested
     // var() in the token would be substituted at :root and could not be retuned
     // from here.
+    //
+    // The family is the only one that comes from a signal rather than the config:
+    // it is the one setting the visitor can change while the app is running, and
+    // every cell in the terminal - the caret width, the art, the label column -
+    // re-lays out from it.
     effect(() => {
       const { font, cursor } = this.config;
       const style = this.host.nativeElement.style;
-      style.setProperty('--font-terminal', font.family);
+      style.setProperty('--font-terminal', this.fontChoice().family);
       style.setProperty('--text-terminal', font.size);
       style.setProperty('--leading-terminal', font.lineHeight);
       style.setProperty('--animate-caret', `caret-blink ${cursor.blinkMs}ms step-end infinite`);
@@ -283,6 +300,28 @@ export class Terminal implements TerminalCommandContext {
         if (alive) this.guest.set(name);
       });
     }
+
+    /*
+      The chosen font, read the same way the name is.
+
+      Marking `font` as a boot source is what makes the stored choice the *first*
+      one painted: the loader does not lift until this read answers, so there is no
+      swap visible under it. Without the mark the terminal would boot in the default
+      face and change every cell on screen a beat later.
+
+      An id that is not in the catalogue is dropped rather than trusted - the same
+      rule the container applies to a theme that has since been removed. It is not
+      remembered as saved either: a choice that cannot be applied is not one the
+      reload will bring back, so reporting it would promise something the app cannot
+      do.
+    */
+    void this.settings.load<string>(SettingsStore.FONT).then((stored) => {
+      this.boot.mark('font');
+      const choice = FICTIONAL_TERMINAL.fonts.find((candidate) => candidate.id === stored);
+      if (!alive || !choice) return;
+      this.fontChoice.set(choice);
+      this.savedFont.set(choice.id);
+    });
   }
 
   /**
@@ -326,7 +365,7 @@ export class Terminal implements TerminalCommandContext {
       if (event.shiftKey) {
         this.newline();
       } else {
-        this.submit();
+        void this.submit();
       }
       return;
     }
@@ -351,7 +390,7 @@ export class Terminal implements TerminalCommandContext {
     if (type === 'insertParagraph') {
       event.preventDefault();
       this.settleCaret();
-      this.submit();
+      void this.submit();
       return;
     }
 
@@ -410,7 +449,7 @@ export class Terminal implements TerminalCommandContext {
    * Bash splices `\<newline>` out before parsing, so committing an open block by
    * accident is not possible here: submit only ever happens on a closed line.
    */
-  private submit(): void {
+  private async submit(): Promise<void> {
     const buffer = this.input();
     const lastLine = buffer.slice(buffer.lastIndexOf('\n') + 1);
 
@@ -439,10 +478,15 @@ export class Terminal implements TerminalCommandContext {
     const resolution = resolveCommand(command);
 
     if (resolution.found) {
-      // Nothing here can fail yet, so a completed command is status 0. When a
-      // real exec lands, it should set whatever the child exited with instead.
-      resolution.command.run(this, resolution.args);
-      this.lastStatus.set(0);
+      /*
+        Status 0 unless the command says otherwise. A promise is awaited first,
+        because a command that finishes its work later must not have its success
+        recorded before that work is known: `font --save` that the browser refused
+        has to be followed by `✗`, not by the `❯` the call itself earned.
+      */
+      const outcome = resolution.command.run(this, resolution.args);
+      if (outcome instanceof Promise) this.lastStatus.set((await outcome) ?? 0);
+      else this.lastStatus.set(outcome ?? 0);
       return;
     }
 
@@ -514,6 +558,47 @@ export class Terminal implements TerminalCommandContext {
       uptimeMs: this.boot.uptimeMs(),
     };
     this.scrollback.update((scrollback) => [...scrollback, block]);
+  }
+
+  /** The selectable fonts. Config order, which is the order `--list` should show. */
+  fontCatalogue(): readonly FontChoice[] {
+    return FICTIONAL_TERMINAL.fonts;
+  }
+
+  currentFont(): FontChoice {
+    return this.fontChoice();
+  }
+
+  savedFontId(): string | null {
+    return this.savedFont();
+  }
+
+  /**
+   * Select for this session.
+   *
+   * Returns false rather than throwing for an unknown id: the command has to say
+   * "no such font" and leave the screen exactly as it was, which is also what makes
+   * trying a font out safe - a wrong guess cannot half-apply a family.
+   */
+  selectFont(id: string): boolean {
+    const choice = FICTIONAL_TERMINAL.fonts.find((candidate) => candidate.id === id);
+    if (!choice) return false;
+    this.fontChoice.set(choice);
+    return true;
+  }
+
+  /**
+   * Persist the choice on screen, reporting whether the browser accepted the write.
+   *
+   * `savedFont` only moves when the transaction completed. A refusal - private
+   * mode, quota, a second tab holding the database - leaves the reported state
+   * saying "session only", which is true, rather than "saved", which would not be.
+   */
+  async saveFont(): Promise<boolean> {
+    const chosen = this.fontChoice().id;
+    const stored = await this.settings.save(SettingsStore.FONT, chosen);
+    if (stored) this.savedFont.set(chosen);
+    return stored;
   }
 
   private settleCaret(): void {

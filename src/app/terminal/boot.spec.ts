@@ -19,10 +19,11 @@ function bootWith(timing: Partial<BootTiming> = {}): TerminalBoot {
 
 const waited = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const shownPercent = (subject: TerminalBoot) => Number(/(\d+)%/.exec(subject.hint())?.[1] ?? -1);
+/** Every source the loader waits on. A new one has to be added here too. */
+const ALL_SOURCES = ['identity', 'history', 'theme', 'font'] as const;
+
 const settleAll = (subject: TerminalBoot) => {
-  subject.mark('identity');
-  subject.mark('history');
-  subject.mark('theme');
+  for (const source of ALL_SOURCES) subject.mark(source);
 };
 
 describe('TerminalBoot', () => {
@@ -36,11 +37,19 @@ describe('TerminalBoot', () => {
 
   it('is ready only once every source has settled', async () => {
     const subject = bootWith({ minimumMs: 40, timeoutMs: 5000 });
-    subject.mark('identity');
-    subject.mark('history');
-    expect(subject.ready()).toBe(false);
 
-    subject.mark('theme');
+    /*
+      Each one in turn, asserting still-not-ready in between. Naming three sources
+      by hand is how a fourth gets added to the loader and quietly forgotten here:
+      this fails the moment the two lists disagree, because the last mark is the one
+      that flips `ready` and it has to be the last of these.
+    */
+    for (const source of ALL_SOURCES.slice(0, -1)) {
+      subject.mark(source);
+      expect(subject.ready()).toBe(false);
+    }
+
+    subject.mark(ALL_SOURCES[ALL_SOURCES.length - 1]);
     expect(subject.ready()).toBe(true);
     await waited(80);
     expect(subject.showLoader()).toBe(false);
