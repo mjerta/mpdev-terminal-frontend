@@ -49,17 +49,24 @@ export interface TerminalConfig {
    * they are shown dim rather than as part of the starship emphasis.
    */
   readonly showUserHost: boolean;
+  /**
+   * The terminal's own type: size, leading, and the fallback cell ratio.
+   *
+   * No `family` here. Which face is drawn is a choice the visitor makes with the
+   * `font` command, so it lives in `fonts` below and in the signal that carries
+   * the selected entry - config holds one answer per fact.
+   */
   readonly font: {
-    readonly family: string;
     readonly size: string;
     readonly lineHeight: string;
     /**
-     * Glyph advance as a fraction of the font size: 600 units per 1000 upem.
+     * Cell width of the default face as a fraction of the font size.
      *
      * Not cosmetic. The `neofetch` logo is laid out in cells, so its width is
-     * `columns * advanceRatio * fontSize`, which is what decides the size that
-     * keeps 48 columns on screen. It also decides which font sizes put a cell edge
-     * exactly on a device pixel - see `snapToWholeCells` in neofetch.ts.
+     * `columns * ratio * fontSize`, which decides both the size that keeps 48
+     * columns on screen and which sizes put a cell edge exactly on a device
+     * pixel. `neofetch` measures the real ratio from the face in use and falls
+     * back to this only when measurement is impossible.
      */
     readonly advanceRatio: number;
   };
@@ -98,6 +105,42 @@ export interface TerminalConfig {
     readonly kernel: string;
     readonly terminal: string;
   };
+  /**
+   * The fonts the `font` command can select. The first entry is the default.
+   */
+  readonly fonts: readonly FontChoice[];
+}
+
+/**
+ * One selectable font.
+ *
+ * `family` is a CSS `font-family` value, so a choice may be a stack rather than a
+ * single face - which is how it has to work, since a generic family like
+ * `monospace` resolves to something different on every device and the only honest
+ * way to describe it is to let the browser answer.
+ *
+ * Deliberately no `note` field. The `font --list` output is committed scrollback,
+ * so it cannot reflow when the window resizes and its rows have to fit the
+ * narrowest plausible phone; a description column would push every row past that.
+ * The one thing worth warning about is stated once, as its own line, instead.
+ */
+export interface FontChoice {
+  /** What you type: `font nerd`. A single word, because arguments split on spaces. */
+  readonly id: string;
+  readonly family: string;
+}
+
+const BUNDLED_STACK =
+  "'JetBrainsMono Nerd Font', 'JetBrainsMono NF', 'Adwaita Mono', ui-monospace, monospace";
+
+/**
+ * The first family in a stack, unquoted: the face the browser is asked to draw
+ * with. `neofetch` prints this and `font --list` shows it, so both say the same
+ * thing as each other without either holding a copy of it.
+ */
+export function drawnFamily(stack: string): string {
+  const [first = ''] = stack.split(',');
+  return first.trim().replace(/^['"]|['"]$/g, '');
 }
 
 export const FICTIONAL_TERMINAL: TerminalConfig = {
@@ -115,14 +158,33 @@ export const FICTIONAL_TERMINAL: TerminalConfig = {
   addNewline: true,
   showUserHost: true,
   font: {
-    // Same stack as @theme in styles/terminal.scss; this one wins at runtime.
-    family:
-      "'JetBrainsMono Nerd Font', 'JetBrainsMono NF', 'Adwaita Mono', ui-monospace, monospace",
     size: '0.9375rem',
     lineHeight: '1.45',
-    // 600 units per 1000 upem, measured from the bundled face. See the interface.
+    /**
+     * Cell width of the default face as a fraction of the font size: 600 units
+     * per 1000 upem, measured.
+     *
+     * A fallback, not the answer. The `neofetch` logo measures the real advance
+     * from the font actually drawn and uses that; this stands in only where a
+     * measurement is impossible, which in practice means a test runner with no
+     * layout engine.
+     */
     advanceRatio: 0.6,
   },
+  fonts: [
+    { id: 'nerd', family: BUNDLED_STACK },
+    {
+      // No bundled face in this stack on purpose: the point of the choice is to
+      // see the device's own mono, and a fallback to ours would quietly undo that.
+      // The `monospace` behind it is not decoration either - measured on Linux, a
+      // lone `ui-monospace` gives `M` an advance of 0.889em and the block glyphs
+      // 0.709em, which is the per-glyph drift the logo exists to avoid. With the
+      // fallback the whole set lands on 0.6em and the art stays one grid.
+      id: 'system',
+      family: 'ui-monospace, monospace',
+    },
+    { id: 'mono', family: 'monospace' },
+  ],
   cursor: {
     blinkMs: 1060,
     steadyAfterKeyMs: 500,

@@ -5,6 +5,7 @@ import {
   OnInit,
   Renderer2,
   afterNextRender,
+  afterRenderEffect,
   computed,
   inject,
   input,
@@ -12,7 +13,7 @@ import {
   viewChild,
 } from '@angular/core';
 
-import { FICTIONAL_TERMINAL } from '../terminal.config';
+import { drawnFamily, FICTIONAL_TERMINAL, FontChoice } from '../terminal.config';
 
 /** One row of the report: the label in the left column, its value on the right. */
 interface Detail {
@@ -162,13 +163,22 @@ export function revealAt(words: readonly StreamWord[], emitted: number): Reveal 
 }
 
 /**
+ * How many cells the probe measures to work out a face's advance.
+ *
+ * A hundred rather than one: one glyph's width comes back rounded to the layout's
+ * subpixel grid, and dividing a hundred of them spreads that error over two
+ * decimal places instead of leaving it as the whole answer.
+ */
+const CELL_PROBE_COUNT = 100;
+
+/**
  * Block-letter MPDEV in the "ANSI Shadow" style.
  *
  * Every row is exactly 48 columns wide, which is not cosmetic: the stylesheet
- * sizes the art from that width (`48 * 0.6em`, JetBrains Mono's advance) against
- * the viewport, so a row that was a column short or long would leave the logo
- * clipped on one edge or drifting away from the right margin on the other.
- * `neofetch.spec.ts` holds that invariant.
+ * sizes the art from that width (`48 * ratio * fontSize`, the ratio measured from
+ * the face in use) against the viewport, so a row that was a column short or long
+ * would leave the logo clipped on one edge or drifting away from the right margin
+ * on the other. `neofetch.spec.ts` holds that invariant.
  */
 const LOGO = [
   '███╗   ███╗ ██████╗  ██████╗  ███████╗ ██╗   ██╗',
@@ -212,6 +222,14 @@ export class Neofetch implements OnInit {
   readonly uptimeMs = input(0);
   /** Commands run so far, including the one that printed this. */
   readonly commands = input(0);
+  /**
+   * The font the block is drawn in.
+   *
+   * Passed down rather than read from config because config only knows the default:
+   * the choice is state the visitor owns, and a report that printed the default
+   * while showing art in something else would be the one place the two disagree.
+   */
+  readonly font = input<FontChoice>(FICTIONAL_TERMINAL.fonts[0]);
 
   protected readonly config = FICTIONAL_TERMINAL;
 
@@ -259,7 +277,6 @@ export class Neofetch implements OnInit {
       has to keep answering to the viewport when the phone rotates.
     */
     afterNextRender(() => {
-      this.sizeLogo();
       this.startStream();
       const stopResize = this.renderer.listen('window', 'resize', () => this.sizeLogo());
       /*
@@ -272,6 +289,20 @@ export class Neofetch implements OnInit {
         stopResize();
         clearInterval(this.revealTimer);
       };
+    });
+
+    /*
+      Re-fit whenever the family changes.
+      This must be an after-render effect and not a plain one: the measurement reads
+      the font the element is actually drawn in, and during an ordinary effect the
+      new `--font-terminal` has not reached the DOM yet, so it would measure the face
+      being replaced. It also runs for every block already on screen, because they
+      inherit the change too - which is why the fit is a reaction and not something
+      the command does to the newest block only.
+    */
+    afterRenderEffect(() => {
+      this.font();
+      this.sizeLogo();
     });
   }
 
@@ -328,12 +359,103 @@ export class Neofetch implements OnInit {
     const el = this.logo()?.nativeElement;
     if (!el) return;
 
+    /*
+      Publish the cell width of the face actually in use before asking CSS for a
+      size, because CSS needs it: the art is `48 * ratio * fontSize` wide, so a face
+      whose cells are wider than the bundled one has to be sized down by the same
+      proportion to occupy the same space. Measured on this machine all three offered
+      choices land on 0.6em - a *lone* `ui-monospace` is 0.71em for the block glyphs,
+      but every entry here has `monospace` behind it, which is what flattens that -
+      so this is insurance for the devices this one cannot test, not a fix for
+      anything observed here.
+
+      Measured from the element's own inherited family rather than from the config
+      entry, so a block already on screen from before a font change is fitted to the
+      face it is really drawn in.
+    */
+    const ratio = this.measureCellRatio(el) || this.config.font.advanceRatio;
+    this.renderer.setStyle(el, '--cell-ratio', String(ratio));
+
     this.renderer.removeStyle(el, 'font-size');
     const ideal = parseFloat(getComputedStyle(el).fontSize);
-    const snapped = snapToWholeCells(ideal, this.config.font.advanceRatio, devicePixelRatio);
-    if (snapped === null || Math.abs(snapped - ideal) < 1e-6) return;
+    /*
+      No computed size means there is nothing to measure. A detached element reports
+      an empty font-size in Chromium - which is what an after-render hook sees if the
+      view has not been inserted yet - and jsdom reports it for every element, laid
+      out or not.
 
-    this.renderer.setStyle(el, 'font-size', `${snapped}px`);
+      Worth being exact about what this prevents: `${NaN}px` never reaches the art,
+      because both engines drop an invalid declaration silently. So this is not
+      corruption, it is a loop that would run four times measuring zero against zero
+      and conclude nothing. CSS already has the size; it keeps it.
+    */
+    if (!(ideal > 0)) return;
+
+    let size = this.snapToCells(ideal, ratio);
+
+    /*
+      Then make the fit an observation instead of a derivation.
+
+      The maths above says 48 columns of this face at this size takes about 69% of
+      the viewport, and in a browser that renders the size it was asked for, it
+      does. But the size can be overridden from outside the page - a minimum font
+      size, Android's font-scale setting, a substituted face wider than the one
+      measured, a `calc()` the browser declines to parse - and then 48 columns are
+      simply wider than the box with nothing left to catch it. `scrollWidth` past
+      `clientWidth` is that catch: it is what a scroller panning sideways actually
+      is, so the art is shrunk until it stops being true.
+
+      Width is proportional to size, so one pass normally lands exactly. The loop is
+      only for the rounding tie that can leave one device pixel over.
+    */
+    for (let attempt = 0; attempt < 4; attempt++) {
+      this.renderer.setStyle(el, 'font-size', `${size}px`);
+      const overflow = el.scrollWidth - el.clientWidth;
+      if (overflow <= 0) break;
+
+      const smaller = this.snapToCells((size * el.clientWidth) / el.scrollWidth, ratio);
+      // Stops rather than looping forever when no whole-pixel size below this one
+      // exists: an art that is a little too wide beats one that vanished.
+      if (smaller >= size) break;
+      size = smaller;
+    }
+  }
+
+  /** The nearest cell-aligned size at or below `px`, or `px` where there is none. */
+  private snapToCells(px: number, ratio: number): number {
+    return snapToWholeCells(px, ratio, devicePixelRatio) ?? px;
+  }
+
+  /**
+   * The drawn face's glyph advance as a fraction of the font size, or 0 when the
+   * browser cannot be asked.
+   *
+   * Measured in the DOM rather than on a canvas because it has to be the number the
+   * layout engine will use: a canvas resolves a generic family like `ui-monospace`
+   * differently from a element, and the difference is exactly what this is meant to
+   * correct.
+   *
+   * The probe is a child of the art, so it inherits the same family, weight and
+   * OpenType settings, and a hundred cells amortise the fractional rounding away.
+   */
+  private measureCellRatio(el: HTMLElement): number {
+    const probe = this.renderer.createElement('span');
+    this.renderer.setAttribute(probe, 'aria-hidden', 'true');
+    this.renderer.setStyle(probe, 'font-size', '100px');
+    this.renderer.setStyle(probe, 'line-height', '1');
+    this.renderer.setStyle(probe, 'white-space', 'pre');
+    this.renderer.setProperty(probe, 'textContent', '█'.repeat(CELL_PROBE_COUNT));
+    this.renderer.appendChild(el, probe);
+    const width = probe.getBoundingClientRect().width;
+    this.renderer.removeChild(el, probe);
+
+    const ratio = width / CELL_PROBE_COUNT / 100;
+    /*
+      Plausible-only: 0 when jsdom reports no layout, and a sane monospace is
+      nowhere near these bounds, so a wild value cannot quietly shrink the art to
+      nothing. Outside the range the config's ratio stands.
+    */
+    return Number.isFinite(ratio) && ratio >= 0.4 && ratio <= 1 ? ratio : 0;
   }
 
   /**
@@ -360,15 +482,14 @@ export class Neofetch implements OnInit {
   }
 
   /**
-   * The first family in the config's font stack, unquoted.
+   * The first family in the chosen stack, unquoted.
    *
    * The whole stack is a CSS declaration, and printing `'JetBrainsMono Nerd Font',
    * 'JetBrainsMono NF', 'Adwaita Mono', ...` would wrap across three lines on a
-   * phone. The first entry is the one that is actually drawn.
+   * phone. The first entry is the one the browser is asked to draw.
    */
   private fontName(): string {
-    const [first = ''] = this.config.font.family.split(',');
-    return first.trim().replace(/^['"]|['"]$/g, '');
+    return drawnFamily(this.font().family);
   }
 
   /**

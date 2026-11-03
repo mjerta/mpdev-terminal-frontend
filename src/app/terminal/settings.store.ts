@@ -8,23 +8,28 @@ interface SettingsRow<T = unknown> {
 
 /**
  * Small key/value persistence for the few things that must outlive a reload:
- * the chosen theme and this visitor's guest name.
+ * the chosen theme, the chosen font, and this visitor's guest name.
  *
  * Shares its database with the command history (see TerminalDatabase), so the
  * app has one storage technology and one failure mode rather than IndexedDB for
  * some settings and localStorage for others.
  *
+ * Adding a setting costs a key, not a version: the store is a plain
+ * `key` -> `value` table, so nothing migrates when a new one is introduced.
+ *
  * Reads are asynchronous, which localStorage is not. That means the first frame
  * paints before these values arrive, so callers must render a sensible default
  * and update in place.
  *
- * Like the rest of the persistence layer, every failure degrades to "did not
- * store" rather than throwing: a blocked upgrade or unavailable IndexedDB must
- * not stop the terminal being used.
+ * Like the rest of the persistence layer, nothing here throws at the caller: a
+ * blocked upgrade or unavailable IndexedDB degrades to "did not store", which is
+ * reported by `save`'s result rather than as an exception, so a command can say
+ * honestly whether the visitor's choice will still be there after a reload.
  */
 @Injectable({ providedIn: 'root' })
 export class SettingsStore {
   static readonly THEME = 'theme';
+  static readonly FONT = 'font';
   static readonly GUEST_NAME = 'guestName';
 
   private readonly db = inject(TerminalDatabase);
@@ -48,9 +53,17 @@ export class SettingsStore {
     });
   }
 
-  async save<T>(key: string, value: T): Promise<void> {
+  /**
+   * Store one setting, reporting whether it actually landed.
+   *
+   * The boolean matters because callers cannot assume the browser let them write:
+   * private mode, a full quota and a second tab holding an old database version
+   * are all ordinary things that happen, and a `font --save` that claimed success
+   * in the face of them would be a lie the visitor only finds out after a reload.
+   */
+  async save<T>(key: string, value: T): Promise<boolean> {
     const database = await this.db.get();
-    if (!database) return;
+    if (!database) return false;
 
     try {
       await new Promise<void>((resolve, reject) => {
@@ -60,8 +73,10 @@ export class SettingsStore {
         tx.onerror = () => reject(tx.error);
         tx.onabort = () => reject(tx.error);
       });
+      return true;
     } catch (error) {
       console.warn('[terminal] setting could not be persisted', key, error);
+      return false;
     }
   }
 

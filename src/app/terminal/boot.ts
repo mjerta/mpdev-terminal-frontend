@@ -8,10 +8,15 @@ import { Injectable, InjectionToken, computed, inject, signal } from '@angular/c
  * - `identity`: the guest name from IndexedDB (immediate when config pins a user)
  * - `history`: the persisted command list
  * - `theme`: the chosen palette
+ * - `font`: the chosen family
+ *
+ * `theme` and `font` are both held until the reveal for the same reason: painting
+ * the default and then swapping to the stored value under a lifted loader is a
+ * visible change of appearance the visitor never asked to see.
  */
-export type BootSource = 'identity' | 'history' | 'theme';
+export type BootSource = 'identity' | 'history' | 'theme' | 'font';
 
-const SOURCES: readonly BootSource[] = ['identity', 'history', 'theme'];
+const SOURCES: readonly BootSource[] = ['identity', 'history', 'theme', 'font'];
 
 /** Boot screen timing. Overridable so tests do not have to wait a second. */
 export interface BootTiming {
@@ -35,8 +40,8 @@ const TICK_MS = 40;
  * Two phases, each doing something honest.
  *
  * *Booting* shows a percentage of the known dwell window. There is a real fixed
- * duration to measure against, so the number climbs smoothly; counting the three
- * settled sources instead would read 0, jump, done. It is capped at 99 because
+ * duration to measure against, so the number climbs smoothly; counting the settled
+ * sources instead would read 0, jump, done. It is capped at 99 because
  * reaching a hundred is reserved for work that is genuinely finished.
  *
  * *Revealing* requires every source answered and the dwell elapsed, with a timeout

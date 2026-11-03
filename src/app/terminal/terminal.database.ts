@@ -12,7 +12,11 @@ import { Injectable } from '@angular/core';
  * Versions:
  *  - 1: `history`, which held rendered scrollback lines.
  *  - 2: added `commands`, dropped `history`.
- *  - 3: added `settings`, for the guest name and the chosen theme.
+ *  - 3: added `settings`, for the guest name, the chosen theme and the chosen font.
+ *
+ * `settings` is a key/value table, so a new setting is a new key rather than a new
+ * version: nothing has to migrate, and a visitor whose database is already at
+ * version 3 gets the new entry on the next write.
  */
 @Injectable({ providedIn: 'root' })
 export class TerminalDatabase {

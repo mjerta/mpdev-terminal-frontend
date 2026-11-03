@@ -112,6 +112,34 @@ describe('Terminal', () => {
       .filter((text) => text !== '');
   }
 
+  /*
+    Shared by the neofetch and font blocks: a report's rows are read the same way
+    whichever command printed it, and `font` has to prove it reaches the report.
+  */
+  const block = (): HTMLElement | null =>
+    (fixture.nativeElement as HTMLElement).querySelector('app-neofetch');
+
+  /** The report row for a label, read the way the template lays it out. */
+  function reportValue(label: string): string | undefined {
+    return (
+      Array.from(block()?.querySelectorAll('.row') ?? [])
+        // The colon is markup, not `dt::after`, so it is part of the label's text.
+        .find((row) => row.querySelector('dt')?.textContent?.trim() === `${label}:`)
+        ?.querySelector('dd')
+        ?.textContent?.trim()
+    );
+  }
+
+  /** Wait for the report to finish arriving; it types itself in word by word. */
+  async function revealed(): Promise<void> {
+    const report = (): Element | null | undefined => block()?.querySelector('.neofetch');
+    for (let i = 0; i < 200 && report()?.getAttribute('aria-busy') === 'true'; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 2));
+      fixture.detectChanges();
+    }
+    fixture.detectChanges();
+  }
+
   describe('the error glyph', () => {
     /*
       This is the regression guard. The failure this catches: one computed read the
@@ -209,28 +237,68 @@ describe('Terminal', () => {
     });
   });
 
-  describe('neofetch', () => {
-    const block = (): HTMLElement | null =>
-      (fixture.nativeElement as HTMLElement).querySelector('app-neofetch');
+  describe('font', () => {
+    /** The published custom property the whole terminal's metrics come from. */
+    const publishedFamily = (): string =>
+      (fixture.nativeElement as HTMLElement).style.getPropertyValue('--font-terminal');
 
-    /** The report row for a label, read the way the template lays it out. */
-    const reportValue = (label: string): string | undefined =>
-      Array.from(block()?.querySelectorAll('.row') ?? [])
-        // The colon is markup, not `dt::after`, so it is part of the label's text.
-        .find((row) => row.querySelector('dt')?.textContent?.trim() === `${label}:`)
-        ?.querySelector('dd')
-        ?.textContent?.trim();
-
-    /** Wait for the report to finish arriving; it types itself in word by word. */
-    async function revealed(): Promise<void> {
-      const report = (): Element | null | undefined => block()?.querySelector('.neofetch');
-      for (let i = 0; i < 200 && report()?.getAttribute('aria-busy') === 'true'; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 2));
-        fixture.detectChanges();
-      }
+    /** Let a command's promise settle; `--save` is the only asynchronous one. */
+    async function settled(): Promise<void> {
+      await new Promise((resolve) => setTimeout(resolve, 10));
       fixture.detectChanges();
     }
 
+    it('publishes the chosen family onto the terminal', () => {
+      run('font mono');
+      expect(publishedFamily()).toContain('monospace');
+
+      run('font nerd');
+      expect(publishedFamily()).toContain('JetBrainsMono Nerd Font');
+    });
+
+    it('lists what is available without changing anything', () => {
+      const before = publishedFamily();
+      run('font --list');
+
+      expect(outputs().join('\n')).toContain('JetBrainsMono Nerd Font');
+      expect(publishedFamily()).toBe(before);
+    });
+
+    it('leaves the choice alone and fails when the name is not one it has', () => {
+      const before = publishedFamily();
+      run('font comic-sans');
+
+      expect(publishedFamily()).toBe(before);
+      // The failure is a usage error, so the very next prompt carries `✗`.
+      expect(liveGlyph()).toBe('✗');
+      expect(outputs().join('\n')).toContain('unknown font');
+    });
+
+    it('reports the saved state honestly when there is nowhere to save', async () => {
+      /*
+        jsdom has no IndexedDB, which makes this the private-mode case: the write
+        is refused. The command still applied the font - that part did happen - but
+        it must not claim the choice will outlive the session, and it must not be
+        followed by a success glyph.
+      */
+      run('font --save mono');
+      await settled();
+
+      expect(publishedFamily()).toContain('monospace');
+      expect(outputs().join('\n')).toContain('could not save');
+      expect(liveGlyph()).toBe('✗');
+    });
+
+    it('prints the font in force at the moment the report was made', async () => {
+      run('font mono');
+      run('neofetch');
+      await revealed();
+
+      expect(reportValue('Font')).toBe('monospace');
+    });
+  });
+
+  describe('neofetch', () => {
     it('places the block directly under the echoed command', () => {
       run('neofetch');
 
