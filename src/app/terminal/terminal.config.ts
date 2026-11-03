@@ -69,6 +69,25 @@ export interface TerminalConfig {
      * back to this only when measurement is impossible.
      */
     readonly advanceRatio: number;
+    /**
+     * The face the `neofetch` logo is always drawn in, whatever font is chosen.
+     *
+     * The logo is not text. It is a grid: 48 columns of blocks, box lines and
+     * spaces that each have to be exactly one advance wide, because a run of
+     * spaces shifts every column to its right. That only holds if one face
+     * supplies every character in it - and no device family can be promised to.
+     * Measured on this machine, a lone `ui-monospace` gives a real space 0.25em
+     * and the block glyphs 0.709em, so blocks land at two and three quarters times
+     * the width of the spaces between them; every row whose space count differs
+     * then starts further right than the one above, and the letters lean. A phone
+     * shows the same mismatch whenever its own mono lacks the box-drawing range and
+     * the browser substitutes one per glyph.
+     *
+     * So the text obeys the choice and the picture does not. The bundled face is the
+     * only one here known to render the whole set at one advance, which is the same
+     * reason `fonts.scss` ships it rather than hoping for a local copy.
+     */
+    readonly logoFamily: string;
   };
   readonly cursor: {
     /** Full blink cycle. Half on, half off, with hard edges. */
@@ -170,6 +189,8 @@ export const FICTIONAL_TERMINAL: TerminalConfig = {
      * layout engine.
      */
     advanceRatio: 0.6,
+    // The logo is drawn in this face whatever the visitor chooses; see the interface.
+    logoFamily: BUNDLED_STACK,
   },
   fonts: [
     { id: 'nerd', family: BUNDLED_STACK },

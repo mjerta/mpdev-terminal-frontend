@@ -35,8 +35,7 @@ flowchart TD
   REVEAL --> STREAM["stream computed<br/>user, host, rows, caretRow, done"]
 
   STREAM --> TPL["neofetch.html"]
-  COMP -->|"afterRenderEffect, when the font changes"| SIZE["measureCellRatio() + sizeLogo()<br/>writes --cell-ratio and font-size"]
-  RENDER -->|"on resize, or once the webfont lands"| SIZE
+  RENDER --> SIZE["measureCellRatio() + sizeLogo()<br/>writes --cell-ratio and font-size"]
   SIZE --> TPL
   TPL --> OUT["The block on screen"]
 ```
@@ -73,8 +72,10 @@ corrupting a line.
 whichever face is actually drawn is, and `sizeLogo()` then asks CSS what font size that implies
 and writes back the largest size at or below it whose glyph cell is a whole number of device
 pixels. Both have to run after render because they need a real element to measure, and both
-re-run on resize, when the webfont finishes loading, and when the `font` command changes the
-family.
+re-run on resize and when the webfont finishes loading.
+
+They do _not_ re-run when the `font` command changes the family, because the art is pinned to
+`font.logoFamily` and never sees that choice.
 
 They stay separate because they answer to different things: the text answers to the stream
 clock, the logo to the viewport.
@@ -106,59 +107,80 @@ count, and in the browser by sampling a real load and checking each frame agains
 
 Paths are from the repository root. The implementation lives under `src/app/`.
 
-| File                                      | Responsibility                                                       |
-| ----------------------------------------- | -------------------------------------------------------------------- |
-| `src/app/terminal/line.ts`                | `LineKind` gains `neofetch`; `RenderLine.uptimeMs` carries the stamp |
-| `src/app/terminal/commands.ts`            | the `neofetch` and `font` commands, `showNeofetch()` on the context  |
-| `src/app/terminal/terminal.ts`            | `showNeofetch()`, the MOTD effect, `commandCount`, the `theme` input |
-| `src/app/terminal/terminal.html`          | branches the scrollback loop onto `<app-neofetch>`                   |
-| `src/app/terminal/terminal.config.ts`     | `reveal.msPerToken`, `fonts`, `font.advanceRatio`, `system.*`        |
-| `src/app/terminal/neofetch/neofetch.ts`   | planning, streaming, measuring: everything above                     |
-| `src/app/terminal/neofetch/neofetch.html` | binds the reveal to the DOM                                          |
-| `src/app/terminal/neofetch/neofetch.scss` | art sizing, the reserved label column, the cursor                    |
+| File                                      | Responsibility                                                            |
+| ----------------------------------------- | ------------------------------------------------------------------------- |
+| `src/app/terminal/line.ts`                | `LineKind` gains `neofetch`; `RenderLine.uptimeMs` carries the stamp      |
+| `src/app/terminal/commands.ts`            | the `neofetch` and `font` commands, `showNeofetch()` on the context       |
+| `src/app/terminal/terminal.ts`            | the MOTD effect, `showNeofetch()`, the `font` state and its two publishes |
+| `src/app/terminal/terminal.html`          | branches the scrollback loop onto `<app-neofetch>`                        |
+| `src/app/terminal/terminal.config.ts`     | `reveal.msPerToken`, `fonts`, `font.logoFamily`, `system.*`               |
+| `src/app/terminal/neofetch/neofetch.ts`   | planning, streaming, measuring: everything above                          |
+| `src/app/terminal/neofetch/neofetch.html` | binds the reveal to the DOM                                               |
+| `src/app/terminal/neofetch/neofetch.scss` | the art family pin and sizing, the label column, the cursor               |
 
 ## Settings
 
-| Setting    | Where                          | Value                               | What it controls                                                                                                    |
-| ---------- | ------------------------------ | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| Cadence    | `config.reveal.msPerToken`     | 38                                  | one word per tick; the report is ~27 words, so ~1s                                                                  |
-| Cell ratio | measured, `measureCellRatio()` | 0.6 for the bundled face            | the art's width and the whole-pixel snap. Config's `font.advanceRatio` stands in only where nothing can be measured |
-| Art width  | `neofetch.scss`                | `100vw * 0.6 / (42 * --cell-ratio)` | about three quarters of a phone's text column, whatever face is drawn                                               |
-| Text cap   | `neofetch.scss`                | `--text-terminal`                   | the art never outgrows the terminal's own text                                                                      |
+| Setting     | Where                                                 | Value                               | What it controls                                                                                                    |
+| ----------- | ----------------------------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Cadence     | `config.reveal.msPerToken`                            | 38                                  | one word per tick; the report is ~27 words, so ~1s                                                                  |
+| Logo family | `config.font.logoFamily` (published as `--font-logo`) | the bundled stack                   | the face the art is always drawn in, whatever the visitor picks for the text                                        |
+| Cell ratio  | measured, `measureCellRatio()`                        | 0.6 for the bundled face            | the art's width and the whole-pixel snap. Config's `font.advanceRatio` stands in only where nothing can be measured |
+| Art width   | `neofetch.scss`                                       | `100vw * 0.6 / (42 * --cell-ratio)` | about three quarters of a phone's text column, whatever face is drawn                                               |
+| Text cap    | `neofetch.scss`                                       | `--text-terminal`                   | the art never outgrows the terminal's own text                                                                      |
 
 `REVEAL_TIMING` wraps the cadence and `REDUCED_MOTION` the platform preference, as injection
 tokens, so tests can drive either without waiting on real time or faking a media query.
 
 ## Changing the font
 
-`font` (see `commands.ts`) swaps `--font-terminal`, which is the family the art is drawn in as
-well as the text. That reaches this block in three places, and only the first is cosmetic:
+`font` (see `commands.ts`) swaps `--font-terminal`. One property, two consumers, and they are
+treated differently on purpose: the **text** follows the choice, the **logo** does not. The art
+reads `--font-logo`, which the terminal publishes from `font.logoFamily` and never changes.
 
-- the report's `Font` row names the family in force when the block was printed, and freezes
-  there - a block printed under one font keeps saying so even though its art restyles live,
-  exactly as it keeps its `Theme` row while the colours change around it;
-- `measureCellRatio()` re-measures, because the cell width is a property of the face, and
-- `--cell-ratio` is republished so the CSS sizing formula produces the same _width_ rather than
-  the same _size_.
+Why the picture cannot follow the choice: the logo is a grid. Forty-eight columns of blocks, box
+lines and spaces have to be exactly one advance wide each, because a run of spaces moves every
+column to its right. A monospace face guarantees that within itself - but no device family can be
+promised to supply the box-drawing range, and when it does not, the browser substitutes a face per
+glyph at whatever advance _that_ face uses. Measured on Linux Chromium, in em per character:
 
-The third is why the formula looks odd. Measured advances on Linux Chromium:
+| family                    | ` ` (U+0020) |       `█` |       `║` |       `M` |
+| ------------------------- | -----------: | --------: | --------: | --------: |
+| the bundled face          |         0.60 |      0.60 |      0.60 |      0.60 |
+| a lone `ui-monospace`     |     **0.25** | **0.709** | **0.709** | **0.889** |
+| `ui-monospace, monospace` |         0.60 |      0.60 |      0.60 |      0.60 |
+| `monospace`               |         0.60 |      0.60 |      0.60 |      0.60 |
 
-| family                    | `M`       | `█`       | `║`       | `❯` |
-| ------------------------- | --------- | --------- | --------- | --- |
-| the bundled face          | 0.6       | 0.6       | 0.6       | 0.6 |
-| a lone `ui-monospace`     | **0.889** | **0.709** | **0.709** | 0.6 |
-| `ui-monospace, monospace` | 0.6       | 0.6       | 0.6       | 0.6 |
-| `monospace`               | 0.6       | 0.6       | 0.6       | 0.6 |
+The middle row is the bug: a space at 0.25 against a block at 0.709 is a factor of nearly three,
+so `███╗   ███╗` places each letter further right than the grid says it belongs, by an amount that
+depends on how many spaces precede it. Those counts differ row to row, and a consistent difference
+in column offset across rows is what an eye calls a lean.
 
-Read the middle row as the bug this whole file exists to avoid: a lone generic family resolves
-to a face that disagrees with itself about how wide a cell is, so every column right of a
-substituted glyph sits at a different pitch and the block letters lean. The `monospace` fallback
-in the second stack is what keeps that from happening, which is why `font --list` offers stacks
-rather than bare families.
+Two things to be honest about. Those are numbers from this machine; the last two rows show the
+offered stacks are safe _here_, and a phone resolving `ui-monospace` to its own mono is not
+something this laptop can tell you anything about - which is exactly why the fix does not depend on
+knowing. And the earlier version of this document reported 0.60 for that lone family's space: the
+probe had measured U+2423, the _visible_ space glyph, not the U+0020 the art is built from.
 
-Because the advance is measured rather than assumed, a face that genuinely is wider gets a
-smaller font size and the same art width: forcing `--cell-ratio` to 0.6, 0.75 and 0.9 produced
-9.29px, 7.43px and 6.19px - and 267.4px of art in all three cases.
+So the text obeys the choice and the picture does not. Forcing the hostile lone family onto both
+properties makes the split visible: the report text follows it and goes non-uniform (spread 0.4585)
+while the logo stays bundled and uniform (spread 0). Pointing it at the logo as well brings the skew
+straight back (0.4578), which is the check that the guard is doing work rather than measuring
+nothing.
+
+For the report itself, the `Font` row names the family in force when the block was printed and
+freezes there - a block printed under one font keeps saying so even while its text restyles live,
+exactly as it keeps its `Theme` row while the colours change around it.
+
+### Why the art is still measured
+
+The logo's family is pinned, so why measure at all? Because it is pinned to a _stack_. Until the
+bundled face finishes loading, or on a machine with no local copy of it, the cells belong to
+whatever the stack resolves to, and that face has its advance - a CJK-capable mono measured here
+puts its block glyphs at a full-width 1.0em with spaces at 0.5em. `measureCellRatio()` asks the
+rendered result rather than trusting the config, and publishes `--cell-ratio` so the CSS formula
+produces the same _width_ rather than the same _size_: `48 * ratio * fontSize`, scaled by `0.6 /
+ratio`. Forcing `--cell-ratio` to 0.6, 0.75 and 0.9 produced 9.29px, 7.43px and 6.19px - and
+267.4px of art in all three cases.
 
 ### Why the fit is measured, not derived
 
@@ -243,6 +265,11 @@ Width, after the wrapping bug: every line `font --list` prints is one visual lin
 390px (counted from paragraph height over line-height, because counting range rects lies - a
 leading run of spaces gets its own rect on a single-line paragraph), and no container on the page
 can pan sideways at 280, 320, 360, 390 or 740px.
+
+The pin, after the lean came back on a phone: force the lone hostile family onto the text and the
+report follows it (non-uniform, spread 0.4585) while the art stays bundled and uniform (spread 0),
+the cell still lands on a whole device pixel and the row still fits; force it onto the art as well
+and the skew returns (0.4578), which is what proves the guard is measuring something real.
 
 ## Known seam: the view does not follow the growth
 
