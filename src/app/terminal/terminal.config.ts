@@ -118,17 +118,16 @@ export interface TerminalConfig {
  * single face - which is how it has to work, since a generic family like
  * `monospace` resolves to something different on every device and the only honest
  * way to describe it is to let the browser answer.
+ *
+ * Deliberately no `note` field. The `font --list` output is committed scrollback,
+ * so it cannot reflow when the window resizes and its rows have to fit the
+ * narrowest plausible phone; a description column would push every row past that.
+ * The one thing worth warning about is stated once, as its own line, instead.
  */
 export interface FontChoice {
   /** What you type: `font nerd`. A single word, because arguments split on spaces. */
   readonly id: string;
   readonly family: string;
-  /**
-   * Shown by `font --list`. States what a choice gives up rather than only what
-   * it offers: the two system stacks may substitute a face per glyph, which is
-   * exactly what makes block art lean.
-   */
-  readonly note: string;
 }
 
 const BUNDLED_STACK =
@@ -173,23 +172,18 @@ export const FICTIONAL_TERMINAL: TerminalConfig = {
     advanceRatio: 0.6,
   },
   fonts: [
-    {
-      id: 'nerd',
-      family: BUNDLED_STACK,
-      note: 'bundled with the app; every cell and glyph comes from one face',
-    },
+    { id: 'nerd', family: BUNDLED_STACK },
     {
       // No bundled face in this stack on purpose: the point of the choice is to
       // see the device's own mono, and a fallback to ours would quietly undo that.
+      // The `monospace` behind it is not decoration either - measured on Linux, a
+      // lone `ui-monospace` gives `M` an advance of 0.889em and the block glyphs
+      // 0.709em, which is the per-glyph drift the logo exists to avoid. With the
+      // fallback the whole set lands on 0.6em and the art stays one grid.
       id: 'system',
       family: 'ui-monospace, monospace',
-      note: "the device's own mono; block art may fall back per glyph and lean",
     },
-    {
-      id: 'mono',
-      family: 'monospace',
-      note: 'whatever the browser calls monospace, which differs per device',
-    },
+    { id: 'mono', family: 'monospace' },
   ],
   cursor: {
     blinkMs: 1060,

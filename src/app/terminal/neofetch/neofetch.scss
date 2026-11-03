@@ -61,12 +61,14 @@
     nearest size whose cell is a whole device pixel; see `snapToWholeCells`.
 
     The `0.6 / --cell-ratio` factor is what makes the same numbers hold for any
-    font. The art is `48 * ratio * fontSize` wide, so a face with wider cells -
-    `ui-monospace` measures 0.71em on Linux against the bundled face's 0.6em - has
-    to be sized down by that same proportion to occupy the same space. The
-    component measures the ratio of the face actually drawn and publishes it; the
-    fallback is the default face's, so the art is already the right size in the
-    frame before that measurement lands.
+    font. The art is `48 * ratio * fontSize` wide, so a face with wider cells has to
+    be sized down by that same proportion to occupy the same space. Measured here,
+    all three offered choices land on 0.6em - a *lone* `ui-monospace` is 0.71em for
+    the block glyphs, but every entry carries `monospace` behind it, which flattens
+    that - so this is insurance for devices this machine cannot test, not a fix for
+    anything observed. The component measures the ratio of the face actually drawn
+    and publishes it; the fallback is the default face's, so the art is the right
+    size in the frame before that measurement lands.
   */
   font-size: min(
     var(--text-terminal, 0.9375rem),

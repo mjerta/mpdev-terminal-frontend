@@ -285,7 +285,7 @@ describe('Terminal', () => {
       await settled();
 
       expect(publishedFamily()).toContain('monospace');
-      expect(outputs().join('\n')).toContain('could not be saved');
+      expect(outputs().join('\n')).toContain('could not save');
       expect(liveGlyph()).toBe('✗');
     });
 

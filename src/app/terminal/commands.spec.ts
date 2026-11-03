@@ -2,6 +2,7 @@ import {
   commandNotFound,
   EXIT_NOT_FOUND,
   EXIT_USAGE,
+  LINE_BUDGET,
   resolveCommand,
   TERMINAL_COMMANDS,
   TerminalCommandContext,
@@ -142,8 +143,8 @@ describe('font', () => {
     const { context, printed } = fakeContext({ current: 'nerd', saved: 'nerd' });
     command('font')?.run(context, []);
 
-    // One line: the id, the family as drawn, and the state it is in.
-    expect(printed[0]).toEqual(['nerd  JetBrainsMono Nerd Font  (saved)']);
+    // Two lines: the choice, then its state indented under it.
+    expect(printed[0]).toEqual(['nerd: JetBrainsMono Nerd Font', '  saved']);
   });
 
   it('says so plainly when the screen and storage disagree', () => {
@@ -154,13 +155,13 @@ describe('font', () => {
     */
     const { context, printed } = fakeContext({ current: 'mono', saved: 'nerd' });
     command('font')?.run(context, []);
-    expect(printed[0][0]).toContain('session only, saved as nerd');
+    expect(printed[0][1]).toBe('  session only, saved: nerd');
   });
 
   it('marks an unsaved default rather than calling it a session change', () => {
     const { context, printed } = fakeContext({ current: 'nerd', saved: null });
     command('font')?.run(context, []);
-    expect(printed[0][0]).toContain('default, not saved');
+    expect(printed[0][1]).toBe('  default, not saved');
   });
 
   it('lists every choice in config order, marking the current one', () => {
@@ -172,14 +173,58 @@ describe('font', () => {
     /*
       The marker column is one character plus a space, so it is sliced off rather
       than trimmed: trimming leaves `*` as the first token of the current row and
-      the id of every other one, which reads like a misaligned table instead.
+      the id of every other one. The id then runs to its colon.
     */
-    const ids = rows.map((line) => line.slice(2).trim().split(/\s+/)[0]);
+    const ids = rows.map((line) => line.slice(2).split(':')[0]);
     // Config order, not alphabetical: the first entry is the one that renders
     // every glyph, and sorting would bury it under `mono`.
     expect(ids).toEqual(FICTIONAL_TERMINAL.fonts.map((choice) => choice.id));
     expect(rows.filter((line) => line.startsWith('*'))).toHaveLength(1);
     expect(rows.find((line) => line.startsWith('*'))).toContain('system');
+    // The two guidance lines close it out.
+    expect(printed[0].slice(-3)).toEqual([
+      '',
+      'device faces vary per glyph',
+      'font <id>, --save to keep',
+    ]);
+  });
+
+  it('keeps every line it prints inside the phone width budget', async () => {
+    /*
+      Output is committed text: it cannot reflow when the window resizes, so a row
+      built to look tidy at a desktop width arrives on a phone as a stack of ragged
+      fragments. The version this guards had 97-character rows.
+
+      Every state the command can be talked into is exercised, because the widest
+      line depends on the combination: the longest family name, the longest status
+      sentence, and the longest rejected argument.
+    */
+    const invocations: (readonly string[])[] = [
+      [],
+      ['--list'],
+      ['mono'],
+      ['--save', 'nerd'],
+      ['--save'],
+      ['comic-sans'],
+      ['--nope'],
+    ];
+
+    for (const args of invocations) {
+      for (const saved of [null, 'nerd', 'mono']) {
+        for (const current of FICTIONAL_TERMINAL.fonts.map((choice) => choice.id)) {
+          const { context, printed } = fakeContext({ current, saved });
+          const outcome = command('font')?.run(context, args);
+          // --save answers asynchronously, so its reply only exists once settled.
+          if (outcome instanceof Promise) await outcome;
+
+          const lines = printed.flat();
+          expect(lines.length).toBeGreaterThan(0);
+          for (const line of lines) {
+            expect(line.length).toBeLessThanOrEqual(LINE_BUDGET);
+          }
+        }
+      }
+    }
   });
 
   it('lists on the short flag too, and ignores the rest of the line', () => {
@@ -189,6 +234,24 @@ describe('font', () => {
     expect(printed[0].length).toBeGreaterThan(1);
     // Reading is never the thing that changes state.
     expect(savedCalls()).toBe(0);
+  });
+
+  it('echoes a rejected name in full even when that exceeds the budget', () => {
+    /*
+      The budget governs what this command composes. A name the visitor typed is
+      different: shortening it to stay inside 31 characters would report back
+      something they did not type, which is the worse failure. So the raw token is
+      passed through and a sufficiently long one is allowed to wrap - which is what
+      bash does with it too.
+    */
+    const longName = 'a-family-name-nobody-has-ever-typed';
+    const { context, printed } = fakeContext();
+    command('font')?.run(context, [longName]);
+
+    expect(printed[0][0]).toBe(`font: ${longName}: unknown font`);
+    expect(printed[0][0].length).toBeGreaterThan(LINE_BUDGET);
+    // The command's own guidance line still respects it.
+    expect(printed[0][1].length).toBeLessThanOrEqual(LINE_BUDGET);
   });
 
   it('selects for the session without writing anything when told to', () => {
@@ -252,8 +315,12 @@ describe('font', () => {
     expect(status).not.toBe(0);
     expect(status).toBeDefined();
     expect(context.savedFontId()).toBeNull();
-    expect(printed.join(' ')).toContain('could not be saved');
-    expect(printed.join(' ')).not.toContain('and saved');
+    // Stated as two lines: what happened, and what it costs the visitor.
+    expect(printed[0]).toEqual([
+      'mono: monospace',
+      '  selected, could not save',
+      '  the browser refused the write',
+    ]);
   });
 
   it('names only the drawn family, never the whole stack', () => {

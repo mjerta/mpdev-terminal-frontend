@@ -160,6 +160,45 @@ Because the advance is measured rather than assumed, a face that genuinely is wi
 smaller font size and the same art width: forcing `--cell-ratio` to 0.6, 0.75 and 0.9 produced
 9.29px, 7.43px and 6.19px - and 267.4px of art in all three cases.
 
+### Why the fit is measured, not derived
+
+The sizing above is a derivation: _48 columns × 0.6em × this size is 69% of the viewport, so it
+fits_. That only holds if the browser renders the font size it was asked for, and several ordinary
+things override it - a minimum font size, Android's font-scale setting, a face substituted for the
+box-drawing range that is wider than the one measured, a `calc()` the browser declines to parse.
+Each of those leaves 48 columns simply wider than the box, and nothing in the derivation notices.
+
+So `sizeLogo()` finishes by measuring: it sets the size, compares the element's `scrollWidth` to
+its `clientWidth`, and shrinks until that comparison stops being true. Width is proportional to
+size, so one pass normally lands exactly; the loop is for the rounding tie. It stops rather than
+shrinking to nothing if no whole-pixel size is left below the current one - art that is a little
+too wide beats art that vanished.
+
+Verified by squeezing the layout to 168px wide and firing a resize: the art went from 255.6px to
+159.8px and the overflow stopped.
+
+### The scroller cannot pan sideways either
+
+`overflow-y: auto` on the scroll container forces its `overflow-x` to compute to `auto` too, so one
+over-wide child turns the whole terminal into a surface that pans left and right on a phone. The
+scroller now sets `overflow-x: hidden` as well. That is a backstop, not the fix: the measured fit
+above is what keeps the art inside, and clipping would hide a bug rather than cause one.
+
+### The list output has a width budget too
+
+`font --list` rows are bounded by `LINE_BUDGET` (31 characters), which is what a 320px screen fits:
+288px of content at a nine-pixel cell is 32 characters, and one is held in reserve.
+
+The reason it is a budget rather than a style choice: `printOutput` commits text to the scrollback,
+and committed text cannot reflow when the window changes. The first version padded a description
+column into every row and produced 97-character lines, which a phone folded into eight ragged
+fragments starting at the margin - a table with its columns gone. So the description column is
+dropped, the caveat became one shared line, and `commands.spec.ts` asserts the budget on every line
+the command can produce.
+
+One deliberate exception: a name the visitor typed is echoed back in full even when that breaks the
+budget. Truncating it to stay inside 31 characters would report something they did not type.
+
 ## Details that only exist because the text grows
 
 **The label column is reserved.** The grid sizes that column to its content, so left alone it
@@ -200,6 +239,11 @@ art width is unchanged, an unknown name or option is refused with `✗` and chan
 report keeps the font it was printed in, `--save` survives a reload, and an id left over from an
 older build falls back to the default rather than wedging the boot screen.
 
+Width, after the wrapping bug: every line `font --list` prints is one visual line at 320px and at
+390px (counted from paragraph height over line-height, because counting range rects lies - a
+leading run of spaces gets its own rect on a single-line paragraph), and no container on the page
+can pan sideways at 280, 320, 360, 390 or 740px.
+
 ## Known seam: the view does not follow the growth
 
 The terminal pins the view to the bottom in an `afterRenderEffect` that reads `scrollback()`,
@@ -232,6 +276,10 @@ landscape, or one with the keyboard open - it is not:
 So the report types itself in, finishes, and leaves the line you are meant to type on off
 screen. Typing still works - the input is captured regardless of scroll position - but the
 caret is not visible.
+
+This is a _vertical_ seam. The `overflow-x-hidden` backstop described above governs the other
+axis and does nothing here: the content is not too wide, it is below the fold and nothing scrolls
+to it.
 
 The fix is to make the follow respond to growth rather than to new lines only. A
 `ResizeObserver` on the scroller's content is the direct version of that; it also covers

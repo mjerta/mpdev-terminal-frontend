@@ -361,28 +361,69 @@ export class Neofetch implements OnInit {
 
     /*
       Publish the cell width of the face actually in use before asking CSS for a
-      size, because CSS needs it: the art is `48 * ratio * fontSize` wide, so a
-      family whose cells are 18% wider - which is what `ui-monospace` turns out to
-      be on Linux - has to be sized down to occupy the same space. Without it the
-      same formula that fits the bundled face would overflow any wider one.
+      size, because CSS needs it: the art is `48 * ratio * fontSize` wide, so a face
+      whose cells are wider than the bundled one has to be sized down by the same
+      proportion to occupy the same space. Measured on this machine all three offered
+      choices land on 0.6em - a *lone* `ui-monospace` is 0.71em for the block glyphs,
+      but every entry here has `monospace` behind it, which is what flattens that -
+      so this is insurance for the devices this one cannot test, not a fix for
+      anything observed here.
 
       Measured from the element's own inherited family rather than from the config
-      entry, so a block still on screen from before a font change is fitted to the
+      entry, so a block already on screen from before a font change is fitted to the
       face it is really drawn in.
     */
-    const ratio = this.measureCellRatio(el);
-    this.renderer.setStyle(el, '--cell-ratio', String(ratio || this.config.font.advanceRatio));
+    const ratio = this.measureCellRatio(el) || this.config.font.advanceRatio;
+    this.renderer.setStyle(el, '--cell-ratio', String(ratio));
 
     this.renderer.removeStyle(el, 'font-size');
     const ideal = parseFloat(getComputedStyle(el).fontSize);
-    const snapped = snapToWholeCells(
-      ideal,
-      ratio || this.config.font.advanceRatio,
-      devicePixelRatio,
-    );
-    if (snapped === null || Math.abs(snapped - ideal) < 1e-6) return;
+    /*
+      No computed size means there is nothing to measure. A detached element reports
+      an empty font-size in Chromium - which is what an after-render hook sees if the
+      view has not been inserted yet - and jsdom reports it for every element, laid
+      out or not.
 
-    this.renderer.setStyle(el, 'font-size', `${snapped}px`);
+      Worth being exact about what this prevents: `${NaN}px` never reaches the art,
+      because both engines drop an invalid declaration silently. So this is not
+      corruption, it is a loop that would run four times measuring zero against zero
+      and conclude nothing. CSS already has the size; it keeps it.
+    */
+    if (!(ideal > 0)) return;
+
+    let size = this.snapToCells(ideal, ratio);
+
+    /*
+      Then make the fit an observation instead of a derivation.
+
+      The maths above says 48 columns of this face at this size takes about 69% of
+      the viewport, and in a browser that renders the size it was asked for, it
+      does. But the size can be overridden from outside the page - a minimum font
+      size, Android's font-scale setting, a substituted face wider than the one
+      measured, a `calc()` the browser declines to parse - and then 48 columns are
+      simply wider than the box with nothing left to catch it. `scrollWidth` past
+      `clientWidth` is that catch: it is what a scroller panning sideways actually
+      is, so the art is shrunk until it stops being true.
+
+      Width is proportional to size, so one pass normally lands exactly. The loop is
+      only for the rounding tie that can leave one device pixel over.
+    */
+    for (let attempt = 0; attempt < 4; attempt++) {
+      this.renderer.setStyle(el, 'font-size', `${size}px`);
+      const overflow = el.scrollWidth - el.clientWidth;
+      if (overflow <= 0) break;
+
+      const smaller = this.snapToCells((size * el.clientWidth) / el.scrollWidth, ratio);
+      // Stops rather than looping forever when no whole-pixel size below this one
+      // exists: an art that is a little too wide beats one that vanished.
+      if (smaller >= size) break;
+      size = smaller;
+    }
+  }
+
+  /** The nearest cell-aligned size at or below `px`, or `px` where there is none. */
+  private snapToCells(px: number, ratio: number): number {
+    return snapToWholeCells(px, ratio, devicePixelRatio) ?? px;
   }
 
   /**

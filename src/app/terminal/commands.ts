@@ -142,12 +142,36 @@ export const EXIT_USAGE = 2;
 /** The font was chosen but the browser would not store it. */
 export const EXIT_NOT_SAVED = 1;
 
-/** Shown everywhere the visitor might need to know what else to type. */
-const FONT_HINT = 'font --list shows what is available';
+/**
+ * What a line of terminal output can be without wrapping on the smallest phone.
+ *
+ * `printOutput` commits text to the scrollback, and committed text cannot reflow
+ * when the window changes, so the width budget is fixed at the narrowest screen
+ * this app is realistic on: 320px, less the scroller's padding, at a nine-pixel
+ * cell is 32 characters. Staying at 31 keeps a character of slack - the earlier
+ * version of the `font` command padded a description column and produced
+ * 97-character rows, which every phone then folded into a stack of ragged lines.
+ *
+ * Exported so `commands.spec.ts` can assert every line respects it.
+ */
+export const LINE_BUDGET = 31;
 
-/** The family as it is drawn, plus its id: `nerd  JetBrainsMono Nerd Font`. */
+/** Shown wherever the visitor might need to know what else to type. */
+const FONT_HINT = 'font <id>, --save to keep';
+
+/**
+ * The one warning the list carries, standing in for a per-row note column.
+ *
+ * The difference that matters between the choices is that the bundled face has
+ * every glyph the app draws with, while a device family may substitute one per
+ * character - which is what makes block art lean. Everything else a row could
+ * say about itself costs width that the table does not have.
+ */
+const FONT_CAVEAT = 'device faces vary per glyph';
+
+/** `nerd: JetBrainsMono Nerd Font` - the id, and the face the browser is asked for. */
 function fontLine(choice: FontChoice): string {
-  return `${choice.id}  ${drawnFamily(choice.family)}`;
+  return `${choice.id}: ${drawnFamily(choice.family)}`;
 }
 
 /**
@@ -163,28 +187,33 @@ function fontState(context: TerminalCommandContext): string {
   if (saved === null) {
     return current.id === context.fontCatalogue()[0].id ? 'default, not saved' : 'session only';
   }
-  return saved === current.id ? 'saved' : `session only, saved as ${saved}`;
+  return saved === current.id ? 'saved' : `session only, saved: ${saved}`;
 }
 
-/** One row per selectable font, the chosen one marked, in the config's order. */
+/**
+ * One row per selectable font, the current one marked, in the config's order.
+ *
+ * No aligned columns: padding the ids to the widest of them costs a character per
+ * row to no purpose with three entries, and a padded family column is exactly the
+ * kind of thing that overflows a small screen.
+ */
 function fontTable(context: TerminalCommandContext): string[] {
-  const catalogue = context.fontCatalogue();
   const current = context.currentFont();
-  const idWidth = Math.max(...catalogue.map((choice) => choice.id.length));
-  const familyWidth = Math.max(...catalogue.map((choice) => drawnFamily(choice.family).length));
-
   /*
-    Config order, not alphabetical: the first entry is the one that ships with the
-    app and renders every glyph, and a list that sorted itself would bury the
-    recommended choice under `mono`.
+    Config order, not alphabetical: the first entry ships with the app and renders
+    every glyph, and a list that sorted itself would bury it under `mono`.
   */
-  const rows = catalogue.map(
-    (choice) =>
-      `${choice.id === current.id ? '*' : ' '} ${choice.id.padEnd(idWidth)}  ${drawnFamily(
-        choice.family,
-      ).padEnd(familyWidth)}  ${choice.note}`,
-  );
-  return [...rows, '', FONT_HINT];
+  const rows = context
+    .fontCatalogue()
+    .map((choice) => `${choice.id === current.id ? '*' : ' '} ${fontLine(choice)}`);
+  return [...rows, '', FONT_CAVEAT, FONT_HINT];
+}
+
+/** The reply after a selection: the row, its state, and how to go further. */
+function selectionReply(context: TerminalCommandContext, saved: boolean): string[] {
+  const line = fontLine(context.currentFont());
+  if (!saved) return [line, '  selected, session only', FONT_HINT];
+  return [line, '  selected and saved'];
 }
 
 /**
@@ -227,7 +256,7 @@ const font: TerminalCommand = {
         and making the visitor retype the name for the second half would be a trap.
       */
       if (!wantsSave) {
-        context.printOutput([`${fontLine(context.currentFont())}  (${fontState(context)})`]);
+        context.printOutput([fontLine(context.currentFont()), `  ${fontState(context)}`]);
         return;
       }
     } else if (!context.selectFont(id)) {
@@ -236,10 +265,7 @@ const font: TerminalCommand = {
     }
 
     if (!wantsSave) {
-      context.printOutput([
-        `font: ${fontLine(context.currentFont())} selected`,
-        'add --save to keep it across reloads',
-      ]);
+      context.printOutput(selectionReply(context, false));
       return;
     }
 
@@ -250,12 +276,14 @@ const font: TerminalCommand = {
     */
     return context.saveFont().then((stored) => {
       if (stored) {
-        context.printOutput([`font: ${fontLine(context.currentFont())} selected and saved`]);
+        context.printOutput(selectionReply(context, true));
         return;
       }
+
       context.printOutput([
-        `font: ${fontLine(context.currentFont())} selected, but it could not be saved`,
-        'the browser refused the write, so this choice ends with the session',
+        fontLine(context.currentFont()),
+        '  selected, could not save',
+        '  the browser refused the write',
       ]);
       return EXIT_NOT_SAVED;
     });
