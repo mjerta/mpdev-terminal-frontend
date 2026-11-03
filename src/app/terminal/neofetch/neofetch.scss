@@ -123,10 +123,15 @@
 
 .details {
   display: grid;
-  /* max-content, so the colon column is as wide as the longest label and every
-     value starts on the same line, which is most of what makes this read as a
-     report rather than a list. */
-  grid-template-columns: max-content minmax(0, 1fr);
+  /*
+    max-content, so the colon column is as wide as the longest label and every
+    value starts on the same line, which is most of what makes this read as a
+    report rather than a list. The component overrides this with the width of the
+    *finished* label column: while the report is being typed, max-content grows
+    each time a longer label lands, and every value already on screen slides
+    right with it.
+  */
+  grid-template-columns: var(--label-column, max-content) minmax(0, 1fr);
   column-gap: 1.5ch;
   row-gap: 0.1em;
   margin: 0;
@@ -141,9 +146,24 @@ dt {
   color: var(--primary);
 }
 
-dt::after {
-  content: ':';
+/* Markup rather than `dt::after` so the typing caret can sit after it. */
+.colon {
   color: var(--text-muted);
+}
+
+/*
+  The cursor that rides the end of the words as they land. A pseudo-element on
+  whichever row is current rather than a child of its own: inserting an element
+  next to an interpolation drags template whitespace into the text, and the
+  report has to stay exactly the words that arrived.
+
+  One cell wide like the prompt's caret, and solid rather than blinking: streamed
+  output is always mid-something, and a blink would read as an idle prompt.
+*/
+.caret-here::after {
+  /* The non-breaking space is width-bearing only; the block is the background. */
+  content: '\00a0';
+  background-color: var(--primary);
 }
 
 dd {

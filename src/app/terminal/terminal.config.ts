@@ -70,6 +70,18 @@ export interface TerminalConfig {
     readonly steadyAfterKeyMs: number;
   };
   /**
+   * How the `neofetch` report arrives on screen.
+   *
+   * The cadence is per *word*, not per character, and that is what makes it read
+   * like streamed output rather than a typewriter: words vary in length, so a
+   * fixed interval still lands characters at an irregular rate - which is what a
+   * model emitting tokens actually looks like - while the schedule itself stays
+   * deterministic enough to test.
+   */
+  readonly reveal: {
+    readonly msPerToken: number;
+  };
+  /**
    * What `neofetch` claims about this machine.
    *
    * Kept in the same map as the prompt so the two cannot describe different
@@ -114,6 +126,10 @@ export const FICTIONAL_TERMINAL: TerminalConfig = {
   cursor: {
     blinkMs: 1060,
     steadyAfterKeyMs: 500,
+  },
+  reveal: {
+    // ~27 words in the report, so the whole thing lands in about a second.
+    msPerToken: 38,
   },
   system: {
     // The fiction, stated plainly: a browser page presenting itself as a

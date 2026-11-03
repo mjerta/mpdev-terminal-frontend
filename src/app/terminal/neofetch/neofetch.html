@@ -1,22 +1,45 @@
-<figure class="neofetch">
+<!--
+  aria-busy only while the report is arriving, then removed. Deliberately no
+  aria-live: a live region would announce every word as it lands, so a screen
+  reader would hear "OS", "mpdev", "web", "terminal" instead of one finished line.
+-->
+<figure class="neofetch" [attr.aria-busy]="stream().done ? null : 'true'">
   <!-- Decorative: the report below already names the host, so reading the block
        letters aloud would only spell "mpdev" a second time. -->
   <pre #logo class="logo" aria-hidden="true">{{ art }}</pre>
 
   <figcaption class="report">
-    <p class="identity">
-      <span>{{ who }}</span>
-      <span class="at">@</span>
-      <span>{{ config.host }}</span>
-    </p>
+    @if (stream().user) {
+      <!--
+        The cursor is a class rather than an extra element: a child inserted around
+        an interpolation brings template whitespace with it, and the report's text has
+        to stay exactly what was typed - nothing else arrives after the last word.
+      -->
+      <p class="identity" [class.caret-here]="caretInRow(-1)">
+        <span>{{ stream().user }}</span>
+        @if (stream().host) {
+          <span class="at">@</span>
+          <span>{{ stream().host }}</span>
+        }
+      </p>
+    }
 
-    <hr class="rule" />
+    <!-- Tied to the identity rather than to the rows: a rule over a report that has
+         not started yet is a line drawn to nothing. -->
+    @if (stream().host) {
+      <hr class="rule" />
+    }
 
-    <dl class="details">
-      @for (detail of details; track detail.label) {
+    <dl class="details" [style.--label-column]="labelColumn">
+      @for (row of stream().rows; track row.label) {
         <div class="row">
-          <dt>{{ detail.label }}</dt>
-          <dd>{{ detail.value }}</dd>
+          <!--
+            The colon is markup rather than `dt::after` so that the pseudo-element is
+            free for the cursor, and so the caret never lands between a label and its
+            colon.
+          -->
+          <dt>{{ row.label }}<span class="colon">:</span></dt>
+          <dd [class.caret-here]="caretInRow($index)">{{ row.value }}</dd>
         </div>
       }
     </dl>

@@ -3,6 +3,7 @@ import { By } from '@angular/platform-browser';
 
 import { Terminal } from './terminal';
 import { BOOT_TIMING, TerminalBoot } from './boot';
+import { REVEAL_TIMING } from './neofetch/neofetch';
 import { FICTIONAL_TERMINAL } from './terminal.config';
 
 describe('Terminal', () => {
@@ -14,7 +15,12 @@ describe('Terminal', () => {
       imports: [Terminal],
       // Long enough to assert against, short enough not to slow the suite.
       // The backstop is effectively off here so reveal depends on the dwell.
-      providers: [{ provide: BOOT_TIMING, useValue: { minimumMs: 250, timeoutMs: 60_000 } }],
+      providers: [
+        { provide: BOOT_TIMING, useValue: { minimumMs: 250, timeoutMs: 60_000 } },
+        // The report types itself in; a word a millisecond keeps that from being
+        // the slowest thing in the suite.
+        { provide: REVEAL_TIMING, useValue: { msPerToken: 1 } },
+      ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(Terminal);
@@ -210,9 +216,20 @@ describe('Terminal', () => {
     /** The report row for a label, read the way the template lays it out. */
     const reportValue = (label: string): string | undefined =>
       Array.from(block()?.querySelectorAll('.row') ?? [])
-        .find((row) => row.querySelector('dt')?.textContent?.trim() === label)
+        // The colon is markup, not `dt::after`, so it is part of the label's text.
+        .find((row) => row.querySelector('dt')?.textContent?.trim() === `${label}:`)
         ?.querySelector('dd')
         ?.textContent?.trim();
+
+    /** Wait for the report to finish arriving; it types itself in word by word. */
+    async function revealed(): Promise<void> {
+      const report = (): Element | null | undefined => block()?.querySelector('.neofetch');
+      for (let i = 0; i < 200 && report()?.getAttribute('aria-busy') === 'true'; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 2));
+        fixture.detectChanges();
+      }
+      fixture.detectChanges();
+    }
 
     it('places the block directly under the echoed command', () => {
       run('neofetch');
@@ -225,9 +242,10 @@ describe('Terminal', () => {
       expect(block()).toBeTruthy();
     });
 
-    it('counts itself in the command total', () => {
+    it('counts itself in the command total', async () => {
       run('help');
       run('neofetch');
+      await revealed();
       // `history` records before running, so by the time the report is drawn the
       // command that asked for it is already in the list.
       expect(reportValue('Commands')).toBe('2');
