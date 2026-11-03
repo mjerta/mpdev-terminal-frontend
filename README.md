@@ -2,6 +2,11 @@
 
 This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 22.1.2.
 
+## Documentation
+
+- [The `neofetch` block](docs/neofetch.md) - how the report is produced, streamed in a word at
+  a time, and measured to keep its block letters square
+
 ## Development server
 
 To start a local development server, run:
