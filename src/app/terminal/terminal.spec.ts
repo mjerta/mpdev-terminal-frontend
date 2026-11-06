@@ -238,9 +238,13 @@ describe('Terminal', () => {
   });
 
   describe('font', () => {
-    /** The published custom property the whole terminal's metrics come from. */
+    /** The published custom property the terminal's text metrics come from. */
     const publishedFamily = (): string =>
       (fixture.nativeElement as HTMLElement).style.getPropertyValue('--font-terminal');
+
+    /** The separate property the logo is pinned to, which must never move. */
+    const publishedLogoFamily = (): string =>
+      (fixture.nativeElement as HTMLElement).style.getPropertyValue('--font-logo');
 
     /** Let a command's promise settle; `--save` is the only asynchronous one. */
     async function settled(): Promise<void> {
@@ -254,6 +258,29 @@ describe('Terminal', () => {
 
       run('font nerd');
       expect(publishedFamily()).toContain('JetBrainsMono Nerd Font');
+    });
+
+    it('keeps the logo on the bundled face whatever the text is drawn in', () => {
+      /*
+        The regression this guards: the art used to inherit the chosen family, and a
+        device face that substitutes the box-drawing range per glyph puts those cells
+        on a different pitch than its own spaces. The logo is a grid, so its spaces
+        shift every column to the right and the block letters lean - reported from a
+        phone, reproduced here by measuring a lone `ui-monospace`: 0.60em for the
+        space, 0.71em for the blocks.
+
+        So two properties are published, and only one of them is a choice.
+      */
+      const logoBefore = publishedLogoFamily();
+      expect(logoBefore).toContain('JetBrainsMono Nerd Font');
+
+      run('font mono');
+      expect(publishedFamily()).toContain('monospace');
+      expect(publishedLogoFamily()).toBe(logoBefore);
+
+      run('font system');
+      expect(publishedFamily()).toContain('ui-monospace');
+      expect(publishedLogoFamily()).toBe(logoBefore);
     });
 
     it('lists what is available without changing anything', () => {

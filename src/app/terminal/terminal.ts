@@ -226,14 +226,17 @@ export class Terminal implements TerminalCommandContext {
     // var() in the token would be substituted at :root and could not be retuned
     // from here.
     //
-    // The family is the only one that comes from a signal rather than the config:
-    // it is the one setting the visitor can change while the app is running, and
-    // every cell in the terminal - the caret width, the art, the label column -
-    // re-lays out from it.
+    // Two families, deliberately. `--font-terminal` follows the visitor's choice and
+    // is what the text, the caret and the report are drawn in. `--font-logo` does not
+    // move: the `neofetch` art is a grid of cells, and a device family that has to
+    // substitute a face for the box-drawing range puts those cells on a different
+    // pitch from its own spaces, which is the lean. The picture stays in the one face
+    // known to be uniform; see `font.logoFamily`.
     effect(() => {
       const { font, cursor } = this.config;
       const style = this.host.nativeElement.style;
       style.setProperty('--font-terminal', this.fontChoice().family);
+      style.setProperty('--font-logo', font.logoFamily);
       style.setProperty('--text-terminal', font.size);
       style.setProperty('--leading-terminal', font.lineHeight);
       style.setProperty('--animate-caret', `caret-blink ${cursor.blinkMs}ms step-end infinite`);

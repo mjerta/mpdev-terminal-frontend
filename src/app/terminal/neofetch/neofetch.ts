@@ -5,7 +5,6 @@ import {
   OnInit,
   Renderer2,
   afterNextRender,
-  afterRenderEffect,
   computed,
   inject,
   input,
@@ -223,11 +222,13 @@ export class Neofetch implements OnInit {
   /** Commands run so far, including the one that printed this. */
   readonly commands = input(0);
   /**
-   * The font the block is drawn in.
+   * The font the terminal's text is drawn in.
    *
-   * Passed down rather than read from config because config only knows the default:
-   * the choice is state the visitor owns, and a report that printed the default
-   * while showing art in something else would be the one place the two disagree.
+   * Only the report's `Font` row reads this. The art does not: the logo is pinned to
+   * `font.logoFamily` because its cells must all share one pitch, and a device face
+   * that substitutes the box-drawing range per glyph breaks that. Which is why the
+   * row describes the *terminal's* font rather than claiming anything about the
+   * picture next to it.
    */
   readonly font = input<FontChoice>(FICTIONAL_TERMINAL.fonts[0]);
 
@@ -277,6 +278,12 @@ export class Neofetch implements OnInit {
       has to keep answering to the viewport when the phone rotates.
     */
     afterNextRender(() => {
+      /*
+        Sized here rather than in an effect because it measures a rendered element:
+        the logo's cell width is a property of the face that actually won the font
+        match, and CSS's answer to that is only knowable once the box exists.
+      */
+      this.sizeLogo();
       this.startStream();
       const stopResize = this.renderer.listen('window', 'resize', () => this.sizeLogo());
       /*
@@ -289,20 +296,6 @@ export class Neofetch implements OnInit {
         stopResize();
         clearInterval(this.revealTimer);
       };
-    });
-
-    /*
-      Re-fit whenever the family changes.
-      This must be an after-render effect and not a plain one: the measurement reads
-      the font the element is actually drawn in, and during an ordinary effect the
-      new `--font-terminal` has not reached the DOM yet, so it would measure the face
-      being replaced. It also runs for every block already on screen, because they
-      inherit the change too - which is why the fit is a reaction and not something
-      the command does to the newest block only.
-    */
-    afterRenderEffect(() => {
-      this.font();
-      this.sizeLogo();
     });
   }
 
@@ -360,18 +353,16 @@ export class Neofetch implements OnInit {
     if (!el) return;
 
     /*
-      Publish the cell width of the face actually in use before asking CSS for a
-      size, because CSS needs it: the art is `48 * ratio * fontSize` wide, so a face
-      whose cells are wider than the bundled one has to be sized down by the same
-      proportion to occupy the same space. Measured on this machine all three offered
-      choices land on 0.6em - a *lone* `ui-monospace` is 0.71em for the block glyphs,
-      but every entry here has `monospace` behind it, which is what flattens that -
-      so this is insurance for the devices this one cannot test, not a fix for
-      anything observed here.
+      Publish the cell width of the face actually drawn before asking CSS for a size,
+      because CSS needs it: the art is `48 * ratio * fontSize` wide, so a face with a
+      wider cell has to be sized down by that same proportion to occupy the same
+      space.
 
-      Measured from the element's own inherited family rather than from the config
-      entry, so a block already on screen from before a font change is fitted to the
-      face it is really drawn in.
+      The logo's family is pinned, so why measure at all? Because pinned to a *stack*.
+      Until the bundled face finishes loading, the cells are whatever the stack's later
+      entries resolve to, and on a device with no local copy they stay that way. The
+      advance is a property of the face that won, not of the name on top of the list,
+      so the number has to come from the rendered result rather than from the config.
     */
     const ratio = this.measureCellRatio(el) || this.config.font.advanceRatio;
     this.renderer.setStyle(el, '--cell-ratio', String(ratio));

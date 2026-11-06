@@ -162,12 +162,13 @@ const FONT_HINT = 'font <id>, --save to keep';
 /**
  * The one warning the list carries, standing in for a per-row note column.
  *
- * The difference that matters between the choices is that the bundled face has
- * every glyph the app draws with, while a device family may substitute one per
- * character - which is what makes block art lean. Everything else a row could
- * say about itself costs width that the table does not have.
+ * What a choice actually changes is the text. The picture does not follow it: the
+ * art needs every cell on one pitch, which only a single face can promise, so a
+ * device family that has to substitute the box-drawing range per glyph would put
+ * its spaces and its blocks at different widths and skew the logo. Saying that
+ * plainly is worth a line; per-row descriptions were not worth ninety characters.
  */
-const FONT_CAVEAT = 'device faces vary per glyph';
+const FONT_CAVEAT = 'art keeps the bundled face';
 
 /** `nerd: JetBrainsMono Nerd Font` - the id, and the face the browser is asked for. */
 function fontLine(choice: FontChoice): string {

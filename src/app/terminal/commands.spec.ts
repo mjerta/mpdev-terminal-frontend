@@ -184,7 +184,7 @@ describe('font', () => {
     // The two guidance lines close it out.
     expect(printed[0].slice(-3)).toEqual([
       '',
-      'device faces vary per glyph',
+      'art keeps the bundled face',
       'font <id>, --save to keep',
     ]);
   });
