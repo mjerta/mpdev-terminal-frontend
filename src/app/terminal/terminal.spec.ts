@@ -281,13 +281,25 @@ describe('Terminal', () => {
       run('font system');
       expect(publishedFamily()).toContain('ui-monospace');
       expect(publishedLogoFamily()).toBe(logoBefore);
+
+      // Every bundled Nerd Font is a different face, but still not the logo's.
+      for (const [id, family] of [
+        ['fira', 'FiraCode Nerd Font Mono'],
+        ['cascadia', 'CaskaydiaMono Nerd Font Mono'],
+        ['hack', 'Hack Nerd Font Mono'],
+        ['sauce', 'SauceCodePro Nerd Font Mono'],
+      ]) {
+        run(`font ${id}`);
+        expect(publishedFamily()).toContain(family);
+        expect(publishedLogoFamily()).toBe(logoBefore);
+      }
     });
 
     it('lists what is available without changing anything', () => {
       const before = publishedFamily();
       run('font --list');
 
-      expect(outputs().join('\n')).toContain('JetBrainsMono Nerd Font');
+      expect(outputs().join('\n')).toContain('JetBrains Mono');
       expect(publishedFamily()).toBe(before);
     });
 

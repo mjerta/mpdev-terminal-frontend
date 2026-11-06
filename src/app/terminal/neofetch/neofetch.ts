@@ -12,7 +12,7 @@ import {
   viewChild,
 } from '@angular/core';
 
-import { drawnFamily, FICTIONAL_TERMINAL, FontChoice } from '../terminal.config';
+import { FICTIONAL_TERMINAL, FontChoice } from '../terminal.config';
 
 /** One row of the report: the label in the left column, its value on the right. */
 interface Detail {
@@ -473,14 +473,15 @@ export class Neofetch implements OnInit {
   }
 
   /**
-   * The first family in the chosen stack, unquoted.
+   * The chosen face's human name, not its CSS declaration.
    *
-   * The whole stack is a CSS declaration, and printing `'JetBrainsMono Nerd Font',
-   * 'JetBrainsMono NF', 'Adwaita Mono', ...` would wrap across three lines on a
-   * phone. The first entry is the one the browser is asked to draw.
+   * Printing the stack would wrap across three lines on a phone, and even the
+   * canonical Nerd Font family name overflows the committed width for one of them.
+   * `FontChoice.label` is the same name `font --list` shows, so the report and the
+   * command cannot describe the same choice differently.
    */
   private fontName(): string {
-    return drawnFamily(this.font().family);
+    return this.font().label;
   }
 
   /**

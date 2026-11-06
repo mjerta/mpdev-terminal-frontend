@@ -8,7 +8,7 @@
  * To add one, append to TERMINAL_COMMANDS — the matcher below is the only
  * consumer.
  */
-import { drawnFamily, FontChoice } from './terminal.config';
+import { FontChoice } from './terminal.config';
 
 export interface TerminalCommandContext {
   /** Erase the screen. The command history is deliberately left untouched. */
@@ -168,11 +168,11 @@ const FONT_HINT = 'font <id>, --save to keep';
  * its spaces and its blocks at different widths and skew the logo. Saying that
  * plainly is worth a line; per-row descriptions were not worth ninety characters.
  */
-const FONT_CAVEAT = 'art keeps the bundled face';
+const FONT_CAVEAT = 'art stays JetBrains Mono';
 
-/** `nerd: JetBrainsMono Nerd Font` - the id, and the face the browser is asked for. */
+/** `nerd: JetBrains Mono` - the id, and the face's human name. */
 function fontLine(choice: FontChoice): string {
-  return `${choice.id}: ${drawnFamily(choice.family)}`;
+  return `${choice.id}: ${choice.label}`;
 }
 
 /**
@@ -195,14 +195,14 @@ function fontState(context: TerminalCommandContext): string {
  * One row per selectable font, the current one marked, in the config's order.
  *
  * No aligned columns: padding the ids to the widest of them costs a character per
- * row to no purpose with three entries, and a padded family column is exactly the
- * kind of thing that overflows a small screen.
+ * row to no purpose with this many entries, and a padded family column is exactly
+ * the kind of thing that overflows a small screen.
  */
 function fontTable(context: TerminalCommandContext): string[] {
   const current = context.currentFont();
   /*
-    Config order, not alphabetical: the first entry ships with the app and renders
-    every glyph, and a list that sorted itself would bury it under `mono`.
+    Config order, not alphabetical: the first entry is the default and the face the
+    logo is pinned to, and a list that sorted itself would bury it under `mono`.
   */
   const rows = context
     .fontCatalogue()

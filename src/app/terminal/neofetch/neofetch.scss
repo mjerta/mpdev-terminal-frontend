@@ -43,7 +43,7 @@
     and whose box-drawing characters may not; when a device face lacks that range
     the browser substitutes a different face per glyph, the substituted cells land
     on a different pitch than the spaces, and the letters lean. Pinning the picture
-    to the bundled face leaves the choice to govern the text, which it can do
+    to one bundled face leaves the choice to govern the text, which it can do
     safely, and nothing else.
 
     The fallback is the terminal's own stack: outside the terminal host there is no
