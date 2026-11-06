@@ -262,6 +262,8 @@ describe('font', () => {
     expect(savedCalls()).toBe(0);
     expect(printed.join(' ')).toContain('selected');
     expect(printed.join(' ')).toContain('--save');
+    // A sample in the new face, so the change is visible and not just named.
+    expect(printed[0]).toContain('The quick brown fox 0123456789');
   });
 
   it('refuses a name that is not in the catalogue and changes nothing', () => {

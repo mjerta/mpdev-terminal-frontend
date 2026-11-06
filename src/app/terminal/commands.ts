@@ -176,6 +176,16 @@ function fontLine(choice: FontChoice): string {
 }
 
 /**
+ * Printed after a selection, in the face that was just chosen.
+ *
+ * The whole scrollback re-renders in the new face, so this is not the only place
+ * the difference shows - but shell output is short, and a line with varied
+ * letterforms and digits makes the change obvious at a glance. It fits the same
+ * width budget as everything else here.
+ */
+const FONT_SAMPLE = 'The quick brown fox 0123456789';
+
+/**
  * Whether the choice on screen is the choice that comes back after a reload.
  *
  * These genuinely differ, and the difference is the whole reason the command has a
@@ -210,11 +220,12 @@ function fontTable(context: TerminalCommandContext): string[] {
   return [...rows, '', FONT_CAVEAT, FONT_HINT];
 }
 
-/** The reply after a selection: the row, its state, and how to go further. */
+/** The reply after a selection: the row, its state, a sample, and how to go on. */
 function selectionReply(context: TerminalCommandContext, saved: boolean): string[] {
   const line = fontLine(context.currentFont());
-  if (!saved) return [line, '  selected, session only', FONT_HINT];
-  return [line, '  selected and saved'];
+  const state = saved ? '  selected and saved' : '  selected, session only';
+  const lines = [line, state, FONT_SAMPLE];
+  return saved ? lines : [...lines, FONT_HINT];
 }
 
 /**

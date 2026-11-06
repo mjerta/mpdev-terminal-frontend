@@ -283,14 +283,14 @@ describe('Terminal', () => {
       expect(publishedLogoFamily()).toBe(logoBefore);
 
       // Every bundled Nerd Font is a different face, but still not the logo's.
-      for (const [id, family] of [
-        ['fira', 'FiraCode Nerd Font Mono'],
-        ['cascadia', 'CaskaydiaMono Nerd Font Mono'],
-        ['hack', 'Hack Nerd Font Mono'],
-        ['sauce', 'SauceCodePro Nerd Font Mono'],
-      ]) {
-        run(`font ${id}`);
-        expect(publishedFamily()).toContain(family);
+      // Derived from the catalogue so a new entry is covered without editing this.
+      for (const choice of FICTIONAL_TERMINAL.fonts) {
+        if (choice.id === 'system' || choice.id === 'mono') continue;
+        const [family = ''] = choice.family.split(',');
+        const drawn = family.trim().replace(/^['"]|['"]$/g, '');
+
+        run(`font ${choice.id}`);
+        expect(publishedFamily()).toContain(drawn);
         expect(publishedLogoFamily()).toBe(logoBefore);
       }
     });

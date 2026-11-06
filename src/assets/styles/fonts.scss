@@ -118,3 +118,98 @@
   font-display: swap;
   src: url('/fonts/SauceCodeProNerdFontMono-Bold.woff2') format('woff2');
 }
+
+/*
+ * Five faces chosen for how different they look, not for how well they match.
+ *
+ * The first four additions (Fira Code, Cascadia, Hack, Source Code Pro) are all
+ * careful coding monos, which makes them a poor way to answer "which font is
+ * this?". These are the opposite: a comic face, a bouncy one, a semi-cursive
+ * one, a bitmap-looking one and a very narrow one. They are here so a choice is
+ * visible at a glance rather than by comparing stems.
+ *
+ * Same subsetting rules as above, with one exception: Iosevka ships thousands of
+ * stylistic alternates, and keeping them inflated its subset to ~300 KB per
+ * weight. The terminal disables ligatures and uses no stylistic sets, so Iosevka
+ * is subset without layout features - which keeps its metrics and glyphs and
+ * drops the alternates, bringing it back to ~80 KB.
+ */
+@font-face {
+  font-family: 'ComicShannsMono Nerd Font Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/ComicShannsMonoNerdFontMono-Regular.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'ComicShannsMono Nerd Font Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/ComicShannsMonoNerdFontMono-Bold.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'FantasqueSansM Nerd Font Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/FantasqueSansMNerdFontMono-Regular.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'FantasqueSansM Nerd Font Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/FantasqueSansMNerdFontMono-Bold.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'VictorMono Nerd Font Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/VictorMonoNerdFontMono-Regular.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'VictorMono Nerd Font Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/VictorMonoNerdFontMono-Bold.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Terminess Nerd Font Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/TerminessNerdFontMono-Regular.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Terminess Nerd Font Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/TerminessNerdFontMono-Bold.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Iosevka Nerd Font Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/IosevkaNerdFontMono-Regular.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Iosevka Nerd Font Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/IosevkaNerdFontMono-Bold.woff2') format('woff2');
+}

@@ -197,6 +197,35 @@ export const FICTIONAL_TERMINAL: TerminalConfig = {
   fonts: [
     { id: 'nerd', label: 'JetBrains Mono', family: BUNDLED_STACK },
     /*
+      Five faces picked for contrast. The coding monos below are all careful in
+      the same way, which makes them hard to tell apart at terminal size; these
+      are not: comic lettering, a bouncy face, a semi-cursive one, a bitmap-looking
+      one and a very narrow one. Trying one of these is how you see that the
+      choice does something.
+
+      `fonts.scss` explains the `Mono` suffix and the subsetting. The `monospace`
+      behind each is the fallback if the woff2 never arrives, and it also keeps a
+      glyph the face lacks on the same pitch - `✗`, the error prompt, is missing
+      from most of them.
+    */
+    {
+      id: 'comic',
+      label: 'Comic Shanns',
+      family: "'ComicShannsMono Nerd Font Mono', monospace",
+    },
+    {
+      id: 'fantasque',
+      label: 'Fantasque Sans',
+      family: "'FantasqueSansM Nerd Font Mono', monospace",
+    },
+    { id: 'victor', label: 'Victor Mono', family: "'VictorMono Nerd Font Mono', monospace" },
+    {
+      id: 'terminus',
+      label: 'Terminess',
+      family: "'Terminess Nerd Font Mono', monospace",
+    },
+    { id: 'iosevka', label: 'Iosevka', family: "'Iosevka Nerd Font Mono', monospace" },
+    /*
       Four more Nerd Fonts, bundled rather than hoped for. `fonts.scss` explains
       why they are the `Mono` variants and why each file is subset.
 
