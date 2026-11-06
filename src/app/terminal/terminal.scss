@@ -5,6 +5,20 @@
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
+
+  /*
+    A terminal is a grid of cells, not a word processor. Programming ligatures
+    collapse `--`, `->` and `!=` into one glyph, and then the screen no longer
+    shows the characters the shell actually received - which is exactly the
+    illusion this prototype is trying not to create. Fira Code is the reason this
+    is here: it is full of them.
+
+    `font-variant-ligatures: none` turns off `liga` and `clig`, but Fira Code
+    implements its ligatures as contextual alternates (`calt`), a separate
+    feature, so that has to be named explicitly.
+  */
+  font-variant-ligatures: none;
+  font-feature-settings: 'calt' 0;
 }
 
 /*

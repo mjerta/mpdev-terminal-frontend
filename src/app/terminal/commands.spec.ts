@@ -144,7 +144,7 @@ describe('font', () => {
     command('font')?.run(context, []);
 
     // Two lines: the choice, then its state indented under it.
-    expect(printed[0]).toEqual(['nerd: JetBrainsMono Nerd Font', '  saved']);
+    expect(printed[0]).toEqual(['nerd: JetBrains Mono', '  saved']);
   });
 
   it('says so plainly when the screen and storage disagree', () => {
@@ -184,7 +184,7 @@ describe('font', () => {
     // The two guidance lines close it out.
     expect(printed[0].slice(-3)).toEqual([
       '',
-      'art keeps the bundled face',
+      'art stays JetBrains Mono',
       'font <id>, --save to keep',
     ]);
   });
@@ -262,6 +262,8 @@ describe('font', () => {
     expect(savedCalls()).toBe(0);
     expect(printed.join(' ')).toContain('selected');
     expect(printed.join(' ')).toContain('--save');
+    // A sample in the new face, so the change is visible and not just named.
+    expect(printed[0]).toContain('The quick brown fox 0123456789');
   });
 
   it('refuses a name that is not in the catalogue and changes nothing', () => {
@@ -323,12 +325,24 @@ describe('font', () => {
     ]);
   });
 
-  it('names only the drawn family, never the whole stack', () => {
+  it('names the face, never the whole CSS stack', () => {
     const { context, printed } = fakeContext();
     command('font')?.run(context, ['--list']);
 
-    // `'JetBrainsMono Nerd Font', 'JetBrainsMono NF', 'Adwaita Mono', ...` is a CSS
-    // declaration, not something to print in a report; three lines on a phone.
+    // `'FiraCode Nerd Font Mono', monospace` is a declaration, not something to
+    // print in a report; the label is the face's name.
     expect(printed[0].join('\n')).not.toMatch(/['"],\s/);
+  });
+
+  it('keeps every report row inside the same budget as the command', () => {
+    /*
+      `font --list` is not the only committed output that names a face: the
+      `neofetch` report prints `Font: <label>`. A label long enough to overflow the
+      phone would wrap in the scrollback, and unlike the command's own lines that
+      row is part of a block whose column alignment cannot reflow.
+    */
+    for (const choice of FICTIONAL_TERMINAL.fonts) {
+      expect(`Font: ${choice.label}`.length).toBeLessThanOrEqual(LINE_BUDGET);
+    }
   });
 });

@@ -8,7 +8,7 @@
  * To add one, append to TERMINAL_COMMANDS — the matcher below is the only
  * consumer.
  */
-import { drawnFamily, FontChoice } from './terminal.config';
+import { FontChoice } from './terminal.config';
 
 export interface TerminalCommandContext {
   /** Erase the screen. The command history is deliberately left untouched. */
@@ -168,12 +168,22 @@ const FONT_HINT = 'font <id>, --save to keep';
  * its spaces and its blocks at different widths and skew the logo. Saying that
  * plainly is worth a line; per-row descriptions were not worth ninety characters.
  */
-const FONT_CAVEAT = 'art keeps the bundled face';
+const FONT_CAVEAT = 'art stays JetBrains Mono';
 
-/** `nerd: JetBrainsMono Nerd Font` - the id, and the face the browser is asked for. */
+/** `nerd: JetBrains Mono` - the id, and the face's human name. */
 function fontLine(choice: FontChoice): string {
-  return `${choice.id}: ${drawnFamily(choice.family)}`;
+  return `${choice.id}: ${choice.label}`;
 }
+
+/**
+ * Printed after a selection, in the face that was just chosen.
+ *
+ * The whole scrollback re-renders in the new face, so this is not the only place
+ * the difference shows - but shell output is short, and a line with varied
+ * letterforms and digits makes the change obvious at a glance. It fits the same
+ * width budget as everything else here.
+ */
+const FONT_SAMPLE = 'The quick brown fox 0123456789';
 
 /**
  * Whether the choice on screen is the choice that comes back after a reload.
@@ -195,14 +205,14 @@ function fontState(context: TerminalCommandContext): string {
  * One row per selectable font, the current one marked, in the config's order.
  *
  * No aligned columns: padding the ids to the widest of them costs a character per
- * row to no purpose with three entries, and a padded family column is exactly the
- * kind of thing that overflows a small screen.
+ * row to no purpose with this many entries, and a padded family column is exactly
+ * the kind of thing that overflows a small screen.
  */
 function fontTable(context: TerminalCommandContext): string[] {
   const current = context.currentFont();
   /*
-    Config order, not alphabetical: the first entry ships with the app and renders
-    every glyph, and a list that sorted itself would bury it under `mono`.
+    Config order, not alphabetical: the first entry is the default and the face the
+    logo is pinned to, and a list that sorted itself would bury it under `mono`.
   */
   const rows = context
     .fontCatalogue()
@@ -210,11 +220,12 @@ function fontTable(context: TerminalCommandContext): string[] {
   return [...rows, '', FONT_CAVEAT, FONT_HINT];
 }
 
-/** The reply after a selection: the row, its state, and how to go further. */
+/** The reply after a selection: the row, its state, a sample, and how to go on. */
 function selectionReply(context: TerminalCommandContext, saved: boolean): string[] {
   const line = fontLine(context.currentFont());
-  if (!saved) return [line, '  selected, session only', FONT_HINT];
-  return [line, '  selected and saved'];
+  const state = saved ? '  selected and saved' : '  selected, session only';
+  const lines = [line, state, FONT_SAMPLE];
+  return saved ? lines : [...lines, FONT_HINT];
 }
 
 /**

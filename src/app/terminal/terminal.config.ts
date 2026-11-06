@@ -83,9 +83,11 @@ export interface TerminalConfig {
      * shows the same mismatch whenever its own mono lacks the box-drawing range and
      * the browser substitutes one per glyph.
      *
-     * So the text obeys the choice and the picture does not. The bundled face is the
-     * only one here known to render the whole set at one advance, which is the same
-     * reason `fonts.scss` ships it rather than hoping for a local copy.
+     * So the text obeys the choice and the picture does not. The logo is pinned to
+     * the default bundled face. The four other bundled Nerd Fonts are uniform too,
+     * but the picture should not move while you are comparing text faces; keeping
+     * it fixed is what makes a choice safe to try and walk away from. `fonts.scss`
+     * ships these faces rather than hoping for a local copy for the same reason.
      */
     readonly logoFamily: string;
   };
@@ -146,21 +148,21 @@ export interface TerminalConfig {
 export interface FontChoice {
   /** What you type: `font nerd`. A single word, because arguments split on spaces. */
   readonly id: string;
+  /**
+   * The name `font --list` and the report's `Font` row show.
+   *
+   * Separate from `family` because the CSS value is a whole stack - quotes,
+   * fallbacks and all - and because the canonical Nerd Font names are too long for
+   * the committed output. `Font: SauceCodePro Nerd Font Mono` is 33 cells, over the
+   * 31-cell budget the scrollback has on a phone; `Font: Source Code Pro` is 21.
+   * This is the human name, not the declaration.
+   */
+  readonly label: string;
   readonly family: string;
 }
 
 const BUNDLED_STACK =
   "'JetBrainsMono Nerd Font', 'JetBrainsMono NF', 'Adwaita Mono', ui-monospace, monospace";
-
-/**
- * The first family in a stack, unquoted: the face the browser is asked to draw
- * with. `neofetch` prints this and `font --list` shows it, so both say the same
- * thing as each other without either holding a copy of it.
- */
-export function drawnFamily(stack: string): string {
-  const [first = ''] = stack.split(',');
-  return first.trim().replace(/^['"]|['"]$/g, '');
-}
 
 export const FICTIONAL_TERMINAL: TerminalConfig = {
   // user intentionally unset: guests get a generated name, see settings.store.ts.
@@ -193,7 +195,57 @@ export const FICTIONAL_TERMINAL: TerminalConfig = {
     logoFamily: BUNDLED_STACK,
   },
   fonts: [
-    { id: 'nerd', family: BUNDLED_STACK },
+    { id: 'nerd', label: 'JetBrains Mono', family: BUNDLED_STACK },
+    /*
+      Five faces picked for contrast. The coding monos below are all careful in
+      the same way, which makes them hard to tell apart at terminal size; these
+      are not: comic lettering, a bouncy face, a semi-cursive one, a bitmap-looking
+      one and a very narrow one. Trying one of these is how you see that the
+      choice does something.
+
+      `fonts.scss` explains the `Mono` suffix and the subsetting. The `monospace`
+      behind each is the fallback if the woff2 never arrives, and it also keeps a
+      glyph the face lacks on the same pitch - `✗`, the error prompt, is missing
+      from most of them.
+    */
+    {
+      id: 'comic',
+      label: 'Comic Shanns',
+      family: "'ComicShannsMono Nerd Font Mono', monospace",
+    },
+    {
+      id: 'fantasque',
+      label: 'Fantasque Sans',
+      family: "'FantasqueSansM Nerd Font Mono', monospace",
+    },
+    { id: 'victor', label: 'Victor Mono', family: "'VictorMono Nerd Font Mono', monospace" },
+    {
+      id: 'terminus',
+      label: 'Terminess',
+      family: "'Terminess Nerd Font Mono', monospace",
+    },
+    { id: 'iosevka', label: 'Iosevka', family: "'Iosevka Nerd Font Mono', monospace" },
+    /*
+      Four more Nerd Fonts, bundled rather than hoped for. `fonts.scss` explains
+      why they are the `Mono` variants and why each file is subset.
+
+      The `monospace` behind each is the fallback if the woff2 never arrives. It
+      is also what keeps a glyph the face lacks - `✗`, the error prompt, is absent
+      from all four - on the same pitch instead of handing that cell to whatever
+      the browser's default family would use.
+    */
+    { id: 'fira', label: 'Fira Code', family: "'FiraCode Nerd Font Mono', monospace" },
+    {
+      id: 'cascadia',
+      label: 'Cascadia Mono',
+      family: "'CaskaydiaMono Nerd Font Mono', monospace",
+    },
+    { id: 'hack', label: 'Hack', family: "'Hack Nerd Font Mono', monospace" },
+    {
+      id: 'sauce',
+      label: 'Source Code Pro',
+      family: "'SauceCodePro Nerd Font Mono', monospace",
+    },
     {
       // No bundled face in this stack on purpose: the point of the choice is to
       // see the device's own mono, and a fallback to ours would quietly undo that.
@@ -202,9 +254,10 @@ export const FICTIONAL_TERMINAL: TerminalConfig = {
       // 0.709em, which is the per-glyph drift the logo exists to avoid. With the
       // fallback the whole set lands on 0.6em and the art stays one grid.
       id: 'system',
+      label: 'ui-monospace',
       family: 'ui-monospace, monospace',
     },
-    { id: 'mono', family: 'monospace' },
+    { id: 'mono', label: 'monospace', family: 'monospace' },
   ],
   cursor: {
     blinkMs: 1060,

@@ -219,12 +219,12 @@ describe('Neofetch', () => {
     expect(valueFor('Commands')).toBe('7');
   });
 
-  it('shortens the font stack to the family that is actually drawn', async () => {
+  it('names the chosen face, not its CSS declaration', async () => {
     render();
     await typed();
-    // Quoted CSS declaration, first family only: the full stack wraps to three
-    // lines on a phone and says nothing the first entry does not.
-    expect(valueFor('Font')).toBe('JetBrainsMono Nerd Font');
+    // The full stack wraps to three lines on a phone, and even the canonical Nerd
+    // Font family name overflows the committed width; the label is the name.
+    expect(valueFor('Font')).toBe('JetBrains Mono');
   });
 
   it('prints the font it was handed rather than the default', async () => {
@@ -237,21 +237,23 @@ describe('Neofetch', () => {
 
   it('freezes the font row too when the choice changes afterwards', async () => {
     /*
-      A block printed under one font keeps naming that font, even though its art
-      restyles with the app. The report is a snapshot of what was printed; the
-      picture is live CSS. The two disagreeing is correct, not a bug.
+      A block printed under one font keeps naming that font. The report is a
+      snapshot of what was printed, so a later choice must not rewrite its history -
+      and because the art is pinned to the bundled face, the picture next to it does
+      not follow the choice either. The row describes the text, which is what the
+      choice actually governed.
     */
     const bundled = FICTIONAL_TERMINAL.fonts[0];
     render({ font: bundled });
     await typed();
-    expect(valueFor('Font')).toBe('JetBrainsMono Nerd Font');
+    expect(valueFor('Font')).toBe('JetBrains Mono');
 
     fixture.componentRef.setInput(
       'font',
       FICTIONAL_TERMINAL.fonts.find((c) => c.id === 'mono')!,
     );
     fixture.detectChanges();
-    expect(valueFor('Font')).toBe('JetBrainsMono Nerd Font');
+    expect(valueFor('Font')).toBe('JetBrains Mono');
   });
 
   it('falls back to the config ratio when there is nothing to measure', () => {

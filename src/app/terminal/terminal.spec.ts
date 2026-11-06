@@ -281,13 +281,25 @@ describe('Terminal', () => {
       run('font system');
       expect(publishedFamily()).toContain('ui-monospace');
       expect(publishedLogoFamily()).toBe(logoBefore);
+
+      // Every bundled Nerd Font is a different face, but still not the logo's.
+      // Derived from the catalogue so a new entry is covered without editing this.
+      for (const choice of FICTIONAL_TERMINAL.fonts) {
+        if (choice.id === 'system' || choice.id === 'mono') continue;
+        const [family = ''] = choice.family.split(',');
+        const drawn = family.trim().replace(/^['"]|['"]$/g, '');
+
+        run(`font ${choice.id}`);
+        expect(publishedFamily()).toContain(drawn);
+        expect(publishedLogoFamily()).toBe(logoBefore);
+      }
     });
 
     it('lists what is available without changing anything', () => {
       const before = publishedFamily();
       run('font --list');
 
-      expect(outputs().join('\n')).toContain('JetBrainsMono Nerd Font');
+      expect(outputs().join('\n')).toContain('JetBrains Mono');
       expect(publishedFamily()).toBe(before);
     });
 

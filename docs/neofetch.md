@@ -117,6 +117,8 @@ Paths are from the repository root. The implementation lives under `src/app/`.
 | `src/app/terminal/neofetch/neofetch.ts`   | planning, streaming, measuring: everything above                          |
 | `src/app/terminal/neofetch/neofetch.html` | binds the reveal to the DOM                                               |
 | `src/app/terminal/neofetch/neofetch.scss` | the art family pin and sizing, the label column, the cursor               |
+| `src/assets/styles/fonts.scss`            | the `@font-face` declarations for every bundled face                      |
+| `public/fonts/`                           | the woff2 files and their licenses                                        |
 
 ## Settings
 
@@ -131,11 +133,69 @@ Paths are from the repository root. The implementation lives under `src/app/`.
 `REVEAL_TIMING` wraps the cadence and `REDUCED_MOTION` the platform preference, as injection
 tokens, so tests can drive either without waiting on real time or faking a media query.
 
+## The bundled faces
+
+`fonts` in `terminal.config.ts` is the catalogue; `fonts.scss` is where the files are declared. Ten
+of the twelve entries are real Nerd Fonts, all bundled. The five after the default are chosen for how
+different they look; the next four are careful coding monos:
+
+| id          | label           | family in the CSS declaration    |
+| ----------- | --------------- | -------------------------------- |
+| `nerd`      | JetBrains Mono  | `JetBrainsMono Nerd Font`        |
+| `comic`     | Comic Shanns    | `ComicShannsMono Nerd Font Mono` |
+| `fantasque` | Fantasque Sans  | `FantasqueSansM Nerd Font Mono`  |
+| `victor`    | Victor Mono     | `VictorMono Nerd Font Mono`      |
+| `terminus`  | Terminess       | `Terminess Nerd Font Mono`       |
+| `iosevka`   | Iosevka         | `Iosevka Nerd Font Mono`         |
+| `fira`      | Fira Code       | `FiraCode Nerd Font Mono`        |
+| `cascadia`  | Cascadia Mono   | `CaskaydiaMono Nerd Font Mono`   |
+| `hack`      | Hack            | `Hack Nerd Font Mono`            |
+| `sauce`     | Source Code Pro | `SauceCodePro Nerd Font Mono`    |
+
+The other two are not files at all: `system` asks for the device's own mono (`ui-monospace,
+monospace`) and `mono` for the generic `monospace`. Those are the honest way to offer "whatever
+this machine has", and the `monospace` fallback in the `system` stack is what keeps a lone generic
+from resolving to a face that disagrees with itself about cell width.
+
+The nine additions are the Nerd Fonts `...NerdFontMono` builds. The `Mono` suffix matters: it forces
+the patched icon glyphs to a single cell, where the default patched face lets some of them take two.
+A terminal is a grid, so only the single-cell variant belongs here.
+
+The first group is deliberately not subtle. A comic face, a bouncy one, a semi-cursive one, a
+bitmap-looking one and a very narrow one are all things you can recognise from a single line of
+text, which the four coding monos are not. `font <id>` prints a short sample in the new face for
+exactly that reason.
+
+The terminal also disables ligatures (`font-variant-ligatures: none`, plus `calt` off, because
+Fira Code implements its ligatures as contextual alternates). Fira Code is the reason: its `--` and
+`->` ligatures would otherwise show one glyph where the shell received two characters, which is the
+one illusion this prototype should not create.
+
+Each file is subset to the ranges this terminal can draw - Latin, punctuation, arrows, box drawing,
+blocks, geometric shapes, dingbats and the powerline cells - instead of the full ~12k-glyph Nerd
+Font. That takes them from 1.1-1.3 MB each to 12-82 KB. It also means the patched icon range is not
+present; this app draws no icons. The one glyph it does draw that most of these faces lack is `✗`
+(the error prompt), which falls through to the monospace fallback exactly as it did before.
+
+Iosevka is subset without layout features as well. It ships thousands of stylistic alternates, and
+keeping them took its subset to ~300 KB per weight; the terminal disables ligatures and uses no
+stylistic sets, so dropping them keeps the glyphs and metrics while bringing the file back to
+~80 KB.
+
+Because an `@font-face` is only fetched when its family is used, the nine extra files cost the
+initial page nothing: the browser downloads one only when the visitor selects it. Licenses are in
+`public/fonts/LICENSE-*` beside the files; the OFL ones require the notice to travel with the font,
+and Comic Shanns and Hack are MIT.
+
 ## Changing the font
 
 `font` (see `commands.ts`) swaps `--font-terminal`. One property, two consumers, and they are
 treated differently on purpose: the **text** follows the choice, the **logo** does not. The art
 reads `--font-logo`, which the terminal publishes from `font.logoFamily` and never changes.
+
+`font <id>` answers with the chosen row, its saved state, and a sample line - "The quick brown fox
+0123456789" - drawn in the face that was just selected. The scrollback re-renders as a whole, so
+the sample is not the only evidence; it is the compact version of the comparison.
 
 Why the picture cannot follow the choice: the logo is a grid. Forty-eight columns of blocks, box
 lines and spaces have to be exactly one advance wide each, because a run of spaces moves every
@@ -145,7 +205,16 @@ glyph at whatever advance _that_ face uses. Measured on Linux Chromium, in em pe
 
 | family                    | ` ` (U+0020) |       `█` |       `║` |       `M` |
 | ------------------------- | -----------: | --------: | --------: | --------: |
-| the bundled face          |         0.60 |      0.60 |      0.60 |      0.60 |
+| JetBrains Mono (default)  |         0.60 |      0.60 |      0.60 |      0.60 |
+| Comic Shanns              |         0.55 |      0.55 |      0.55 |      0.55 |
+| Fantasque Sans            |        0.518 |     0.518 |     0.518 |     0.518 |
+| Victor Mono               |        0.545 |     0.545 |     0.545 |     0.545 |
+| Terminess                 |          0.5 |       0.5 |       0.5 |       0.5 |
+| Iosevka                   |          0.5 |       0.5 |       0.5 |       0.5 |
+| Fira Code                 |        0.615 |     0.615 |     0.615 |     0.615 |
+| Cascadia Mono             |        0.586 |     0.586 |     0.586 |     0.586 |
+| Hack                      |        0.602 |     0.602 |     0.602 |     0.602 |
+| Source Code Pro           |         0.60 |      0.60 |      0.60 |      0.60 |
 | a lone `ui-monospace`     |     **0.25** | **0.709** | **0.709** | **0.889** |
 | `ui-monospace, monospace` |         0.60 |      0.60 |      0.60 |      0.60 |
 | `monospace`               |         0.60 |      0.60 |      0.60 |      0.60 |
@@ -154,6 +223,11 @@ The middle row is the bug: a space at 0.25 against a block at 0.709 is a factor 
 so `███╗   ███╗` places each letter further right than the grid says it belongs, by an amount that
 depends on how many spaces precede it. Those counts differ row to row, and a consistent difference
 in column offset across rows is what an eye calls a lean.
+
+The ten bundled Nerd Fonts are each uniform within themselves - that is what makes them safe to
+put in a terminal - but their cells are not the same width as each other. The terminal layout uses
+`ch`, so the caret, the label column and the prompt all follow whichever face is in force. The logo
+is pinned, so it never sees that difference.
 
 Two things to be honest about. Those are numbers from this machine; the last two rows show the
 offered stacks are safe _here_, and a phone resolving `ui-monospace` to its own mono is not
@@ -167,9 +241,10 @@ while the logo stays bundled and uniform (spread 0). Pointing it at the logo as 
 straight back (0.4578), which is the check that the guard is doing work rather than measuring
 nothing.
 
-For the report itself, the `Font` row names the family in force when the block was printed and
-freezes there - a block printed under one font keeps saying so even while its text restyles live,
-exactly as it keeps its `Theme` row while the colours change around it.
+For the report itself, the `Font` row names the face in force when the block was printed - its
+human label, not the CSS stack - and freezes there. A block printed under one font keeps saying so
+even while its text restyles live, exactly as it keeps its `Theme` row while the colours change
+around it.
 
 ### Why the art is still measured
 
