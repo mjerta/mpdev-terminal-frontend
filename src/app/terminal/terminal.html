@@ -8,8 +8,13 @@
     gets past that. -->
   <div
     #scroller
-    class="min-h-0 grow overflow-y-auto overflow-x-hidden p-4 font-terminal leading-terminal text-terminal sm:p-6"
+    class="scroller min-h-0 grow overflow-y-auto overflow-x-hidden p-4 font-terminal leading-terminal text-terminal sm:p-6"
     (scroll)="onScroll($event)"
+    (pointerdown)="onHoldStart($event)"
+    (pointermove)="onHoldMove($event)"
+    (pointerup)="onHoldEnd()"
+    (pointercancel)="onHoldEnd()"
+    (contextmenu)="$event.preventDefault()"
   >
     @for (line of scrollback(); track $index) {
       @if (line.kind === 'neofetch') {
@@ -56,6 +61,44 @@
       </p>
     }
   </div>
+
+  <!--
+    The history arrows a hold reveals, for fingers that have no ↑ ↓ keys.
+
+    A hold is a press that stays still for HOLD_TIMING.ms; any travel past the
+    slop becomes a scroll instead. The pill appears at the held spot (clamped
+    inside the terminal) and puts the command history under the thumb: ↑ walks
+    older, ↓ newer, past the end back to what was typed. It hides itself after
+    a few idle seconds, or as soon as anything is typed or run.
+  -->
+  @if (historyNav(); as nav) {
+    <div
+      class="history-nav absolute z-10 flex gap-1 rounded-full border border-border bg-card p-1 shadow-lg"
+      [style.left.px]="nav.x"
+      [style.top.px]="nav.y"
+    >
+      <!-- preventDefault on pointerdown keeps the tap from moving focus, so the
+           soft keyboard stays up while you walk the history. -->
+      <button
+        type="button"
+        class="flex h-11 w-11 items-center justify-center rounded-full text-foreground transition-colors hover:bg-muted"
+        aria-label="Previous command"
+        (pointerdown)="$event.preventDefault()"
+        (click)="recallPrevious(); focusCapture()"
+      >
+        ↑
+      </button>
+      <button
+        type="button"
+        class="flex h-11 w-11 items-center justify-center rounded-full text-foreground transition-colors hover:bg-muted"
+        aria-label="Next command"
+        (pointerdown)="$event.preventDefault()"
+        (click)="recallNext(); focusCapture()"
+      >
+        ↓
+      </button>
+    </div>
+  }
 
   <!--
     The only thing that receives keystrokes. Invisible but never aria-hidden:

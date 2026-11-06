@@ -85,3 +85,24 @@
   color: transparent;
   font-size: 1px;
 }
+
+/*
+  The hold gesture needs the press to stay a press. Left alone, a phone answers
+  a long stationary touch with its own gestures - text selection, the callout,
+  the context menu - and any of them would eat the two seconds before the
+  history arrows can appear. The contextmenu event is prevented in the
+  template; these cover the rest. Selecting terminal text was never a feature
+  here, so nothing is given up.
+*/
+.scroller {
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/*
+  Centred on the held spot, raised above it so the pill does not land under the
+  thumb itself. left/top are host coordinates set by the component.
+*/
+.history-nav {
+  transform: translate(-50%, calc(-100% - 12px));
+}

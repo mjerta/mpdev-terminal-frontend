@@ -2,6 +2,7 @@ import {
   Component,
   DestroyRef,
   ElementRef,
+  InjectionToken,
   afterRenderEffect,
   computed,
   effect,
@@ -28,6 +29,26 @@ import { VisibleViewport } from './visible-viewport';
 
 /** Shared empty array: a stable reference keeps the inner loop from re-rendering. */
 const NO_SEGMENTS: readonly PromptSegment[] = [];
+
+/**
+ * The rhythm of the hold gesture that reveals the history arrows.
+ *
+ * A token rather than constants for the same reason the boot and reveal timings
+ * are: the tests can shrink the two-second wait to nothing instead of paying it.
+ */
+export interface HoldTiming {
+  /** How long the press has to stay still before it counts as a hold. */
+  readonly ms: number;
+  /** How far the finger may wander before the press becomes a scroll, in px. */
+  readonly slopPx: number;
+  /** How long the arrows stay after the last tap before hiding themselves. */
+  readonly idleMs: number;
+}
+
+export const HOLD_TIMING = new InjectionToken<HoldTiming>('terminal.holdTiming', {
+  providedIn: 'root',
+  factory: () => ({ ms: 2000, slopPx: 12, idleMs: 6000 }),
+});
 
 /**
  * A fictional terminal: no PTY, no shell, no input element doing the work.
@@ -78,6 +99,26 @@ export class Terminal implements TerminalCommandContext {
   /** Solid rather than blinking for a moment after each keystroke. */
   protected readonly typing = signal(false);
   private typingTimer: ReturnType<typeof setTimeout> | undefined;
+
+  /*
+    History browsing. `historyIndex` is null while the live line is your own
+    text; once you walk back it is the position in `commands` being shown, and
+    `draft` holds what you had typed so coming back past the newest entry
+    restores it - the same contract readline keeps.
+  */
+  private historyIndex: number | null = null;
+  private draft = '';
+
+  /**
+   * Where the hold-revealed arrows are, in host coordinates; null when hidden.
+   * They appear where the finger is, because that is the spot the user is
+   * already looking at.
+   */
+  protected readonly historyNav = signal<{ x: number; y: number } | null>(null);
+  private holdTimer: ReturnType<typeof setTimeout> | undefined;
+  private hideTimer: ReturnType<typeof setTimeout> | undefined;
+  private holdStart: { x: number; y: number } | null = null;
+  private readonly hold = inject(HOLD_TIMING);
 
   /** Whether the view is parked at the bottom, which decides if we auto-follow. */
   private atBottom = true;
@@ -219,7 +260,11 @@ export class Terminal implements TerminalCommandContext {
     private readonly host: ElementRef<HTMLElement>,
     destroyRef: DestroyRef,
   ) {
-    destroyRef.onDestroy(() => clearTimeout(this.typingTimer));
+    destroyRef.onDestroy(() => {
+      clearTimeout(this.typingTimer);
+      clearTimeout(this.holdTimer);
+      clearTimeout(this.hideTimer);
+    });
 
     // Publish the config as the custom properties the Tailwind utilities read.
     // --animate-caret is written as the whole shorthand on purpose: a nested
@@ -350,6 +395,8 @@ export class Terminal implements TerminalCommandContext {
 
   /** Track whether the user is at the bottom, which decides if we auto-follow. */
   protected onScroll(event: Event): void {
+    // A scrolling finger is not a holding one, whatever the timer thought.
+    this.cancelHold();
     const el = event.target as HTMLElement;
     this.atBottom = el.scrollHeight - el.clientHeight - el.scrollTop <= 1;
   }
@@ -360,6 +407,18 @@ export class Terminal implements TerminalCommandContext {
 
   protected onKeydown(event: KeyboardEvent): void {
     this.settleCaret();
+
+    /*
+      ↑ / ↓ walk the command history, the same thing the hold-revealed arrows
+      do. A soft keyboard has no arrow keys, which is why the gesture exists -
+      the shared recall logic is below, used by both.
+    */
+    if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+      event.preventDefault();
+      if (event.key === 'ArrowUp') this.recallPrevious();
+      else this.recallNext();
+      return;
+    }
 
     if (event.key === 'Enter') {
       event.preventDefault();
@@ -380,6 +439,7 @@ export class Terminal implements TerminalCommandContext {
       event.preventDefault();
       // When the buffer ends in a newline this deletes it, which rejoins the two
       // lines — the same thing a real terminal does.
+      this.exitBrowsing();
       this.pop();
     }
   }
@@ -387,6 +447,14 @@ export class Terminal implements TerminalCommandContext {
   protected onBeforeInput(event: Event): void {
     const inputEvent = event as InputEvent;
     const type = inputEvent.inputType;
+
+    /*
+      Any real typing ends the history walk: the recalled text becomes an edited
+      draft rather than a position in the log, so the next recall starts from the
+      newest command again. Recall itself sets the buffer directly and never
+      passes through here.
+    */
+    this.exitBrowsing();
 
     // Everything is preventDefault-ed: the buffer is the single source of truth
     // and the helper input is never allowed to accumulate text.
@@ -443,6 +511,120 @@ export class Terminal implements TerminalCommandContext {
     this.input.update((buffer) => `${buffer}\n`);
   }
 
+  /*
+    History recall. Shared by the arrow keys and the hold-revealed arrows, so the
+    gesture and the keyboard cannot drift apart.
+  */
+
+  /** One step older in the history: what ↑ does in a real terminal. */
+  protected recallPrevious(): void {
+    const history = this.commands();
+    if (history.length === 0) return;
+
+    if (this.historyIndex === null) {
+      // Stepping away from your own text: keep it, so ↓ past the newest entry
+      // brings it back instead of losing what was half typed.
+      this.draft = this.input();
+      this.historyIndex = history.length - 1;
+    } else {
+      this.historyIndex = Math.max(0, this.historyIndex - 1);
+    }
+    this.input.set(history[this.historyIndex]);
+    this.remainVisible();
+  }
+
+  /** One step newer, and past the end back to the draft you left. */
+  protected recallNext(): void {
+    if (this.historyIndex === null) return;
+
+    const history = this.commands();
+    if (this.historyIndex < history.length - 1) {
+      this.historyIndex += 1;
+      this.input.set(history[this.historyIndex]);
+    } else {
+      this.historyIndex = null;
+      this.input.set(this.draft);
+      this.draft = '';
+    }
+    this.remainVisible();
+  }
+
+  /** Typing or running a line ends the walk and puts the arrows away. */
+  private exitBrowsing(): void {
+    this.historyIndex = null;
+    this.draft = '';
+    this.hideHistoryNav();
+  }
+
+  /*
+    The hold gesture: a press that stays still for `hold.ms` reveals the ↑ ↓
+    arrows at that spot. Any travel beyond the slop is a scroll, not a hold, and
+    the timer is cancelled - otherwise every slow flick would end in arrows.
+  */
+
+  protected onHoldStart(event: PointerEvent): void {
+    // Only the primary button or a touch counts; a right-click is not a hold.
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    this.cancelHold();
+    this.hideHistoryNav();
+    this.holdStart = { x: event.clientX, y: event.clientY };
+    this.holdTimer = setTimeout(() => {
+      this.holdTimer = undefined;
+      this.holdStart = null;
+      // No history yet means there is nothing to walk back to.
+      if (this.commands().length === 0) return;
+      this.showHistoryNav(event.clientX, event.clientY);
+    }, this.hold.ms);
+  }
+
+  protected onHoldMove(event: PointerEvent): void {
+    if (!this.holdTimer || !this.holdStart) return;
+    const moved = Math.hypot(event.clientX - this.holdStart.x, event.clientY - this.holdStart.y);
+    if (moved > this.hold.slopPx) this.cancelHold();
+  }
+
+  protected onHoldEnd(): void {
+    this.cancelHold();
+  }
+
+  private cancelHold(): void {
+    if (this.holdTimer !== undefined) {
+      clearTimeout(this.holdTimer);
+      this.holdTimer = undefined;
+    }
+    this.holdStart = null;
+  }
+
+  private showHistoryNav(clientX: number, clientY: number): void {
+    /*
+      Positioned in host coordinates and clamped so the pill cannot leave the
+      terminal, even for a hold at the very edge. The width is a constant: the
+      pill contains two fixed-size buttons, so it never needs measuring.
+    */
+    const rect = this.host.nativeElement.getBoundingClientRect();
+    const half = 64;
+    this.historyNav.set({
+      x: Math.min(Math.max(clientX - rect.left, half), rect.width - half),
+      y: Math.max(clientY - rect.top, 72),
+    });
+    this.remainVisible();
+  }
+
+  protected hideHistoryNav(): void {
+    this.historyNav.set(null);
+    if (this.hideTimer !== undefined) {
+      clearTimeout(this.hideTimer);
+      this.hideTimer = undefined;
+    }
+  }
+
+  /** Keep the arrows alive for a while after they were last used. */
+  private remainVisible(): void {
+    if (this.historyNav() === null) return;
+    if (this.hideTimer !== undefined) clearTimeout(this.hideTimer);
+    this.hideTimer = setTimeout(() => this.historyNav.set(null), this.hold.idleMs);
+  }
+
   /**
    * Enter without shift. A line whose trailing backslash count is odd is
    * unfinished in bash's eyes, so drop that one backslash and keep typing on the
@@ -453,6 +635,12 @@ export class Terminal implements TerminalCommandContext {
    * accident is not possible here: submit only ever happens on a closed line.
    */
   private async submit(): Promise<void> {
+    /*
+      Running a line ends the walk, whatever it was showing. The recalled command
+      is recorded as a fresh history entry below, which is exactly what bash does.
+    */
+    this.exitBrowsing();
+
     const buffer = this.input();
     const lastLine = buffer.slice(buffer.lastIndexOf('\n') + 1);
 

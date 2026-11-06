@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 
-import { Terminal } from './terminal';
+import { HOLD_TIMING, Terminal } from './terminal';
 import { BOOT_TIMING, TerminalBoot } from './boot';
 import { REVEAL_TIMING } from './neofetch/neofetch';
 import { FICTIONAL_TERMINAL } from './terminal.config';
@@ -20,6 +20,8 @@ describe('Terminal', () => {
         // The report types itself in; a word a millisecond keeps that from being
         // the slowest thing in the suite.
         { provide: REVEAL_TIMING, useValue: { msPerToken: 1 } },
+        // A two-second hold per test would be the slowest thing in the suite.
+        { provide: HOLD_TIMING, useValue: { ms: 5, slopPx: 12, idleMs: 50 } },
       ],
     }).compileComponents();
 
@@ -488,6 +490,143 @@ describe('Terminal', () => {
       expect(bootText()).toMatch(BAR);
       type('ls');
       expect(bootText()).not.toMatch(BAR);
+    });
+  });
+
+  describe('history recall', () => {
+    function pressArrow(key: 'ArrowUp' | 'ArrowDown'): void {
+      fixture.debugElement.query(By.css('input.capture')).triggerEventHandler('keydown', {
+        key,
+        shiftKey: false,
+        isComposing: false,
+        preventDefault: () => {},
+      });
+      fixture.detectChanges();
+    }
+
+    /** The text on the live line: the prompt row minus its glyph. */
+    function liveText(): string {
+      return (promptRows().at(-1) ?? '').replace(/^\S+\s*/, '');
+    }
+
+    function nav(): HTMLElement | null {
+      return (fixture.nativeElement as HTMLElement).querySelector('.history-nav');
+    }
+
+    function navButton(index: number): void {
+      fixture.debugElement
+        .queryAll(By.css('.history-nav button'))
+        [index].triggerEventHandler('click', {});
+      fixture.detectChanges();
+    }
+
+    /** Press and hold on the scroller, then let the (test-shrunk) timer fire. */
+    async function hold(): Promise<void> {
+      fixture.debugElement.query(By.css('.scroller')).triggerEventHandler('pointerdown', {
+        pointerType: 'touch',
+        button: 0,
+        clientX: 100,
+        clientY: 200,
+        preventDefault: () => {},
+      });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      fixture.detectChanges();
+    }
+
+    it('walks the history with the arrow keys, newest first', () => {
+      run('help');
+      run('history');
+
+      pressArrow('ArrowUp');
+      expect(liveText()).toBe('history');
+      pressArrow('ArrowUp');
+      expect(liveText()).toBe('help');
+      // The oldest entry sticks: ↑ at the top does not wrap.
+      pressArrow('ArrowUp');
+      expect(liveText()).toBe('help');
+      pressArrow('ArrowDown');
+      expect(liveText()).toBe('history');
+      // Past the newest is your own empty line again.
+      pressArrow('ArrowDown');
+      expect(liveText()).toBe('');
+    });
+
+    it('gives back the half-typed line when you come back down', () => {
+      run('history');
+      type('neof');
+
+      pressArrow('ArrowUp');
+      expect(liveText()).toBe('history');
+      pressArrow('ArrowDown');
+      expect(liveText()).toBe('neof');
+    });
+
+    it('treats typing over a recalled line as a new walk', () => {
+      run('one');
+      run('two');
+
+      pressArrow('ArrowUp');
+      expect(liveText()).toBe('two');
+      type('x');
+      expect(liveText()).toBe('twox');
+      // The walk ended at the edit, so ↑ starts over from the newest command.
+      pressArrow('ArrowUp');
+      expect(liveText()).toBe('two');
+    });
+
+    it('reveals the arrows on a held press and drives the same recall', async () => {
+      run('help');
+
+      await hold();
+      expect(nav()).toBeTruthy();
+
+      navButton(0); // ↑
+      expect(liveText()).toBe('help');
+      navButton(1); // ↓
+      expect(liveText()).toBe('');
+    });
+
+    it('reveals nothing when there is no history to walk', async () => {
+      await hold();
+      expect(nav()).toBeNull();
+    });
+
+    it('reads a wandering finger as a scroll, not a hold', async () => {
+      const scroller = fixture.debugElement.query(By.css('.scroller'));
+      scroller.triggerEventHandler('pointerdown', {
+        pointerType: 'touch',
+        button: 0,
+        clientX: 100,
+        clientY: 200,
+        preventDefault: () => {},
+      });
+      scroller.triggerEventHandler('pointermove', {
+        pointerType: 'touch',
+        clientX: 100,
+        clientY: 260,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      fixture.detectChanges();
+      expect(nav()).toBeNull();
+    });
+
+    it('retires the arrows after a few idle seconds', async () => {
+      run('help');
+      await hold();
+      expect(nav()).toBeTruthy();
+
+      await new Promise((resolve) => setTimeout(resolve, 90));
+      fixture.detectChanges();
+      expect(nav()).toBeNull();
+    });
+
+    it('puts the arrows away as soon as you type', async () => {
+      run('help');
+      await hold();
+      expect(nav()).toBeTruthy();
+
+      type('x');
+      expect(nav()).toBeNull();
     });
   });
 });
