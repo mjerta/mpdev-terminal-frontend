@@ -1,4 +1,19 @@
-<div class="relative flex h-full min-h-0 flex-col" (click)="focusCapture()">
+<!--
+  The hold is detected on the whole terminal surface, not just empty space:
+  holding anywhere - on the text, on the art, on the padding - counts, because
+  asking the finger to find a blank spot first would make the gesture the hard
+  part. Travel past the slop is what turns it into a scroll, and the context
+  menu is disarmed here so the phone's own long-press cannot get there first.
+-->
+<div
+  class="relative flex h-full min-h-0 flex-col"
+  (click)="focusCapture()"
+  (pointerdown)="onHoldStart($event)"
+  (pointermove)="onHoldMove($event)"
+  (pointerup)="onHoldEnd()"
+  (pointercancel)="onHoldEnd()"
+  (contextmenu)="$event.preventDefault()"
+>
   <!-- The scroller: the only element in the app that scrolls.
     overflow-x-hidden is not decoration. `overflow-y: auto` forces the visible
     overflow-x to compute to auto as well, so a single child wider than the box
@@ -10,11 +25,6 @@
     #scroller
     class="scroller min-h-0 grow overflow-y-auto overflow-x-hidden p-4 font-terminal leading-terminal text-terminal sm:p-6"
     (scroll)="onScroll($event)"
-    (pointerdown)="onHoldStart($event)"
-    (pointermove)="onHoldMove($event)"
-    (pointerup)="onHoldEnd()"
-    (pointercancel)="onHoldEnd()"
-    (contextmenu)="$event.preventDefault()"
   >
     @for (line of scrollback(); track $index) {
       @if (line.kind === 'neofetch') {

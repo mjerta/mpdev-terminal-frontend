@@ -89,14 +89,16 @@
 /*
   The hold gesture needs the press to stay a press. Left alone, a phone answers
   a long stationary touch with its own gestures - text selection, the callout,
-  the context menu - and any of them would eat the two seconds before the
-  history arrows can appear. The contextmenu event is prevented in the
-  template; these cover the rest. Selecting terminal text was never a feature
-  here, so nothing is given up.
+  the context menu, the double-tap zoom - and any of them would eat the two
+  seconds before the history arrows can appear. The contextmenu event is
+  prevented in the template; these cover the rest. `pan-y` still allows the
+  vertical scroll, which is the only scroll this surface has. Selecting
+  terminal text was never a feature here, so nothing is given up.
 */
 .scroller {
   user-select: none;
   -webkit-touch-callout: none;
+  touch-action: pan-y;
 }
 
 /*

@@ -520,9 +520,9 @@ describe('Terminal', () => {
       fixture.detectChanges();
     }
 
-    /** Press and hold on the scroller, then let the (test-shrunk) timer fire. */
+    /** Press and hold on the terminal surface, then let the (test-shrunk) timer fire. */
     async function hold(): Promise<void> {
-      fixture.debugElement.query(By.css('.scroller')).triggerEventHandler('pointerdown', {
+      fixture.debugElement.query(By.css('.relative')).triggerEventHandler('pointerdown', {
         pointerType: 'touch',
         button: 0,
         clientX: 100,
@@ -592,15 +592,15 @@ describe('Terminal', () => {
     });
 
     it('reads a wandering finger as a scroll, not a hold', async () => {
-      const scroller = fixture.debugElement.query(By.css('.scroller'));
-      scroller.triggerEventHandler('pointerdown', {
+      const surface = fixture.debugElement.query(By.css('.relative'));
+      surface.triggerEventHandler('pointerdown', {
         pointerType: 'touch',
         button: 0,
         clientX: 100,
         clientY: 200,
         preventDefault: () => {},
       });
-      scroller.triggerEventHandler('pointermove', {
+      surface.triggerEventHandler('pointermove', {
         pointerType: 'touch',
         clientX: 100,
         clientY: 260,
