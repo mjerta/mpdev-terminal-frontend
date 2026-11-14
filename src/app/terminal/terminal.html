@@ -14,8 +14,8 @@
   (touchcancel)="onHoldEnd()"
   (pointerdown)="onHoldStart($event)"
   (pointermove)="onHoldMove($event)"
-  (pointerup)="onHoldEnd()"
-  (pointercancel)="onHoldEnd()"
+  (pointerup)="onHoldPointerEnd($event)"
+  (pointercancel)="onHoldPointerEnd($event)"
   (contextmenu)="$event.preventDefault()"
 >
   <!-- The scroller: the only element in the app that scrolls.
@@ -112,6 +112,12 @@
         ↓
       </button>
     </div>
+  }
+
+  <!-- Temporary hold telemetry, only with ?debug in the URL. pointer-events:
+       none, so it can sit anywhere without eating the gesture it watches. -->
+  @if (debugEnabled) {
+    <pre class="hold-debug">{{ debugState() + '\n' + debugHold().join('\n') }}</pre>
   }
 
   <!--

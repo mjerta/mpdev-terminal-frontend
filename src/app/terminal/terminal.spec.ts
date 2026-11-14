@@ -614,6 +614,23 @@ describe('Terminal', () => {
       expect(nav()).toBeTruthy();
     });
 
+    it('does not let a pointer-level cancel kill a touch hold', async () => {
+      /*
+        The regression this guards: on a real phone, Chrome's own long-press
+        recognizer can retire the pointer stream with a pointercancel mid-hold.
+        The touch channel started the timer, so only the touch channel may end it.
+      */
+      run('help');
+      const surface = fixture.debugElement.query(By.css('.relative'));
+      surface.triggerEventHandler('touchstart', {
+        touches: [{ clientX: 100, clientY: 200 }],
+      });
+      surface.triggerEventHandler('pointercancel', { pointerType: 'touch' });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      fixture.detectChanges();
+      expect(nav()).toBeTruthy();
+    });
+
     it('retires the arrows after a few idle seconds', async () => {
       run('help');
       await hold();

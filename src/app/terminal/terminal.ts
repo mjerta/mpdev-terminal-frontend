@@ -127,6 +127,26 @@ export class Terminal implements TerminalCommandContext {
   private holdStart: { x: number; y: number } | null = null;
   private readonly hold = inject(HOLD_TIMING);
 
+  /*
+    Temporary telemetry for the hold gesture, rendered only when the URL carries
+    `?debug`. A phone the gesture fails on cannot open a devtools console, so the
+    console comes to the phone: which events arrive, what the timer does, how
+    much history there is. Remove once the gesture is confirmed everywhere.
+  */
+  protected readonly debugHold = signal<readonly string[]>([]);
+  protected readonly debugEnabled =
+    typeof location !== 'undefined' && location.search.includes('debug');
+
+  protected readonly debugState = computed(
+    () => `commands=${this.commandCount()} nav=${this.historyNav() ? 'shown' : 'hidden'}`,
+  );
+
+  private trace(event: string): void {
+    if (!this.debugEnabled) return;
+    const time = new Date().toISOString().slice(17, 23);
+    this.debugHold.update((log) => [...log.slice(-9), `${time} ${event}`]);
+  }
+
   /** Whether the view is parked at the bottom, which decides if we auto-follow. */
   private atBottom = true;
 
@@ -591,12 +611,16 @@ export class Terminal implements TerminalCommandContext {
     if (event.pointerType === 'touch') return; // touchstart has this one
     // Only the primary button counts; a right-click is not a hold.
     if (event.pointerType === 'mouse' && event.button !== 0) return;
+    this.trace(`pointerdown ${event.pointerType}`);
     this.beginHold(event.clientX, event.clientY);
   }
 
   protected onHoldTouchStart(event: TouchEvent): void {
     const touch = event.touches[0];
-    if (touch) this.beginHold(touch.clientX, touch.clientY);
+    if (touch) {
+      this.trace('touchstart');
+      this.beginHold(touch.clientX, touch.clientY);
+    }
   }
 
   protected onHoldMove(event: PointerEvent): void {
@@ -609,7 +633,23 @@ export class Terminal implements TerminalCommandContext {
     if (touch) this.moveHold(touch.clientX, touch.clientY);
   }
 
+  /**
+   * Mouse and pen end here. Touch ends are deliberately not: when the phone's
+   * own long-press recognizer wakes up it can retire the pointer stream with a
+   * `pointercancel`, and that must not kill the timer the touch channel started.
+   */
+  protected onHoldPointerEnd(event: PointerEvent): void {
+    if (event.pointerType === 'touch') {
+      // The event the old wiring died to: log it, do not act on it.
+      this.trace(`ignored ${event.type} (touch)`);
+      return;
+    }
+    this.cancelHold();
+  }
+
+  /** A touch really ending: finger lifted, or the gesture became a scroll. */
   protected onHoldEnd(): void {
+    this.trace('touch end/cancel');
     this.cancelHold();
   }
 
@@ -617,9 +657,11 @@ export class Terminal implements TerminalCommandContext {
     this.cancelHold();
     this.hideHistoryNav();
     this.holdStart = { x, y };
+    this.trace(`timer start (${Math.round(x)},${Math.round(y)})`);
     this.holdTimer = setTimeout(() => {
       this.holdTimer = undefined;
       this.holdStart = null;
+      this.trace(`timer fired, commands=${this.commands().length}`);
       // No history yet means there is nothing to walk back to.
       if (this.commands().length === 0) return;
       this.showHistoryNav(x, y);
@@ -629,7 +671,10 @@ export class Terminal implements TerminalCommandContext {
   private moveHold(x: number, y: number): void {
     if (!this.holdTimer || !this.holdStart) return;
     const moved = Math.hypot(x - this.holdStart.x, y - this.holdStart.y);
-    if (moved > this.hold.slopPx) this.cancelHold();
+    if (moved > this.hold.slopPx) {
+      this.trace(`move ${Math.round(moved)}px, cancelled`);
+      this.cancelHold();
+    }
   }
 
   private cancelHold(): void {
@@ -641,6 +686,7 @@ export class Terminal implements TerminalCommandContext {
   }
 
   private showHistoryNav(clientX: number, clientY: number): void {
+    this.trace('nav shown');
     /*
       Positioned in host coordinates and clamped so the pill cannot leave the
       terminal, even for a hold at the very edge. The width is a constant: the
