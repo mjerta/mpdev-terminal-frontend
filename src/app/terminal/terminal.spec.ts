@@ -522,12 +522,8 @@ describe('Terminal', () => {
 
     /** Press and hold on the terminal surface, then let the (test-shrunk) timer fire. */
     async function hold(): Promise<void> {
-      fixture.debugElement.query(By.css('.relative')).triggerEventHandler('pointerdown', {
-        pointerType: 'touch',
-        button: 0,
-        clientX: 100,
-        clientY: 200,
-        preventDefault: () => {},
+      fixture.debugElement.query(By.css('.relative')).triggerEventHandler('touchstart', {
+        touches: [{ clientX: 100, clientY: 200 }],
       });
       await new Promise((resolve) => setTimeout(resolve, 20));
       fixture.detectChanges();
@@ -593,21 +589,29 @@ describe('Terminal', () => {
 
     it('reads a wandering finger as a scroll, not a hold', async () => {
       const surface = fixture.debugElement.query(By.css('.relative'));
-      surface.triggerEventHandler('pointerdown', {
-        pointerType: 'touch',
+      surface.triggerEventHandler('touchstart', {
+        touches: [{ clientX: 100, clientY: 200 }],
+      });
+      surface.triggerEventHandler('touchmove', {
+        touches: [{ clientX: 100, clientY: 260 }],
+      });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      fixture.detectChanges();
+      expect(nav()).toBeNull();
+    });
+
+    it('answers a held mouse press on the desktop too', async () => {
+      run('help');
+      fixture.debugElement.query(By.css('.relative')).triggerEventHandler('pointerdown', {
+        pointerType: 'mouse',
         button: 0,
         clientX: 100,
         clientY: 200,
         preventDefault: () => {},
       });
-      surface.triggerEventHandler('pointermove', {
-        pointerType: 'touch',
-        clientX: 100,
-        clientY: 260,
-      });
       await new Promise((resolve) => setTimeout(resolve, 20));
       fixture.detectChanges();
-      expect(nav()).toBeNull();
+      expect(nav()).toBeTruthy();
     });
 
     it('retires the arrows after a few idle seconds', async () => {
@@ -627,6 +631,24 @@ describe('Terminal', () => {
 
       type('x');
       expect(nav()).toBeNull();
+    });
+
+    it('advertises the hold until the first command runs', async () => {
+      const hintText = (): string => {
+        const last = paragraphs().at(-1);
+        return last?.querySelector('.live-hint')?.textContent?.trim() ?? '';
+      };
+      // Finish boot the way the motd tests do: settle the sources, wait the dwell.
+      const boot = TestBed.inject(TerminalBoot);
+      boot.mark('identity');
+      boot.mark('history');
+      boot.mark('theme');
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      fixture.detectChanges();
+
+      expect(hintText()).toBe('tip: hold for history ↑ ↓');
+      run('help');
+      expect(hintText()).toBe('');
     });
   });
 });

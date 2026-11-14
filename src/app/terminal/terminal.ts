@@ -51,6 +51,13 @@ export const HOLD_TIMING = new InjectionToken<HoldTiming>('terminal.holdTiming',
 });
 
 /**
+ * The one-line discoverability note for the hold gesture, shown muted on the
+ * live line until the first command runs. A gesture nobody can find is not a
+ * feature; this is how it gets found. It fits the committed-line budget.
+ */
+const HISTORY_TIP = 'tip: hold for history ↑ ↓';
+
+/**
  * A fictional terminal: no PTY, no shell, no input element doing the work.
  *
  * Keystrokes are captured by an invisible helper input (so mobile browsers will
@@ -255,6 +262,19 @@ export class Terminal implements TerminalCommandContext {
   protected readonly bootHint = computed(() =>
     this.input() === '' && this.boot.showLoader() ? this.boot.hint() : '',
   );
+
+  /**
+   * What the muted span on the live line shows: the loader's hint while booting,
+   * then the hold tip until anything has run. Typing hides either immediately.
+   */
+  protected readonly liveHint = computed(() => {
+    if (this.input() !== '') return '';
+    if (this.boot.showLoader()) return this.boot.hint();
+    // Once anything has been run, the scrollback holds more than the greeting
+    // and the tip has done its job.
+    const untouched = this.scrollback().every((line) => line.kind === 'neofetch');
+    return untouched ? HISTORY_TIP : '';
+  });
 
   constructor(
     private readonly host: ElementRef<HTMLElement>,
@@ -560,31 +580,56 @@ export class Terminal implements TerminalCommandContext {
     The hold gesture: a press that stays still for `hold.ms` reveals the ↑ ↓
     arrows at that spot. Any travel beyond the slop is a scroll, not a hold, and
     the timer is cancelled - otherwise every slow flick would end in arrows.
+
+    Two channels, one gesture. Touch events are the primary channel on a phone:
+    they fire first and are not the events the browser retires when its own
+    long-press recognizer wakes up. Pointer events cover mouse and pen, and the
+    touch variants are skipped so the channels cannot double-start a timer.
   */
 
   protected onHoldStart(event: PointerEvent): void {
-    // Only the primary button or a touch counts; a right-click is not a hold.
+    if (event.pointerType === 'touch') return; // touchstart has this one
+    // Only the primary button counts; a right-click is not a hold.
     if (event.pointerType === 'mouse' && event.button !== 0) return;
+    this.beginHold(event.clientX, event.clientY);
+  }
+
+  protected onHoldTouchStart(event: TouchEvent): void {
+    const touch = event.touches[0];
+    if (touch) this.beginHold(touch.clientX, touch.clientY);
+  }
+
+  protected onHoldMove(event: PointerEvent): void {
+    if (event.pointerType === 'touch') return;
+    this.moveHold(event.clientX, event.clientY);
+  }
+
+  protected onHoldTouchMove(event: TouchEvent): void {
+    const touch = event.touches[0];
+    if (touch) this.moveHold(touch.clientX, touch.clientY);
+  }
+
+  protected onHoldEnd(): void {
+    this.cancelHold();
+  }
+
+  private beginHold(x: number, y: number): void {
     this.cancelHold();
     this.hideHistoryNav();
-    this.holdStart = { x: event.clientX, y: event.clientY };
+    this.holdStart = { x, y };
     this.holdTimer = setTimeout(() => {
       this.holdTimer = undefined;
       this.holdStart = null;
       // No history yet means there is nothing to walk back to.
       if (this.commands().length === 0) return;
-      this.showHistoryNav(event.clientX, event.clientY);
+      this.showHistoryNav(x, y);
     }, this.hold.ms);
   }
 
-  protected onHoldMove(event: PointerEvent): void {
+  private moveHold(x: number, y: number): void {
     if (!this.holdTimer || !this.holdStart) return;
-    const moved = Math.hypot(event.clientX - this.holdStart.x, event.clientY - this.holdStart.y);
+    const moved = Math.hypot(x - this.holdStart.x, y - this.holdStart.y);
     if (moved > this.hold.slopPx) this.cancelHold();
-  }
-
-  protected onHoldEnd(): void {
-    this.cancelHold();
   }
 
   private cancelHold(): void {
